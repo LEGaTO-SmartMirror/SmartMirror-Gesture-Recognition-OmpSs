@@ -63,17 +63,20 @@ extern "C"
 
 	void PrintDetections(const TrackingObjects& trackers)
 	{
-		std::cout << "{\"DETECTED_GESTURES\": [";
+		std::stringstream str("");
+		str << "{\"DETECTED_GESTURES\": [";
 
-		for (const TrackingObject& t : trackers)
+		for (const auto& [i, t] : enumerate(trackers))
 		{
-			std::cout << string_format("{\"TrackID\": %i, \"name\": \"%s\", \"center\": [%.5f,%.5f], \"w_h\": [%.5f,%.5f]}", t.trackingID, t.name.c_str(), t.bBox.x, t.bBox.y, t.bBox.width, t.bBox.height);
-			// std::cout << "ID: " << t.trackingID << " - Name: " << t.name << std::endl;
+			str << string_format("{\"TrackID\": %i, \"name\": \"%s\", \"center\": [%.5f,%.5f], \"w_h\": [%.5f,%.5f]}", t.trackingID, t.name.c_str(), t.bBox.x, t.bBox.y, t.bBox.width, t.bBox.height);
+			// Prevent a trailing ',' for the last element
+			if (i + 1 < trackers.size()) str << ", ";
 		}
 
 		g_lastTrackings = trackers;
 
-		std::cout << string_format("], \"DETECTED_GESTURES_AMOUNT\": %llu }\n", g_lastTrackings.size()) << std::flush;
+		str << string_format("], \"DETECTED_GESTURES_AMOUNT\": %llu }\n", g_lastTrackings.size());
+		std::cout << str.str() << std::flush;
 	}
 
 	void ProcessDetections(const uint8_t buffer)
@@ -117,7 +120,6 @@ extern "C"
 			}
 		}
 
-		// #error This requires a few more checks to catch all possible changes
 		if (changed)
 			PrintDetections(trackers);
 	}
@@ -172,13 +174,14 @@ extern "C"
 
 		if (g_elapsedTime >= ONE_SECOND)
 		{
-			if (fps > maxFPS) fps = 30.0;
+			if (fps > maxFPS) fps = maxFPS;
 			// std::cout << "Frames: " << (*pFrameCnt) << "| Time: " << g_timer
 			// 		  << " | Avg Time: " << g_elapsedTime / (*pFrameCnt)
 			// 		  << " | FPS: " << 1000 / (g_elapsedTime / (*pFrameCnt)) << std::endl;
 
 			std::cout << string_format("{\"GESTURE_DET_FPS\": %.2f, \"Iteration\": %d, \"maxFPS\": %.2f, \"lastCurrMSec\": %.2f}\n",
-									   fps, iteration, maxFPS, itrTime);
+									   fps, iteration, maxFPS, itrTime)
+					  << std::flush;
 
 			*pFrameCnt    = 0;
 			g_elapsedTime = 0;
