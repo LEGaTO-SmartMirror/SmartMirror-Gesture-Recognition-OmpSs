@@ -50,7 +50,11 @@ using BBoxes = std::vector<BBox>;
 #define DIFF_THRESHOLD 0.005
 #endif
 
+#ifdef THRESHOLDED_DIFF
 #define THRESHED_CMP(a, b, OP) (std::fabs(a - b) OP DIFF_THRESHOLD)
+#else
+#define THRESHED_CMP(a, b, OP) (a == b)
+#endif
 
 struct TrackingObject
 {
@@ -58,6 +62,7 @@ struct TrackingObject
 		bBox(),
 		score(0),
 		trackingID(0),
+		faceID(0),
 		name("Unknown"),
 		lastCheck(0),
 		lastUpdate(0),
@@ -69,6 +74,7 @@ struct TrackingObject
 		bBox(box),
 		score(s),
 		trackingID(tID),
+		faceID(0),
 		name("Unknown"),
 		lastCheck(-1),
 		lastUpdate(0),
@@ -80,6 +86,7 @@ struct TrackingObject
 		bBox(box),
 		score(s),
 		trackingID(tID),
+		faceID(0),
 		name(nName),
 		lastCheck(-1),
 		lastUpdate(0),
@@ -89,19 +96,19 @@ struct TrackingObject
 
 	bool operator!=(const TrackingObject& rhs)
 	{
-		if (this->trackingID != rhs.trackingID) return false;
-		if (this->name != rhs.name) return false;
+		if (this->trackingID != rhs.trackingID) return true;
+		if (this->name != rhs.name) return true;
 #ifdef THRESHOLDED_DIFF
-		if (THRESHED_CMP(this->bBox.x, rhs.bBox.x, >=)) return false;
-		if (THRESHED_CMP(this->bBox.y, rhs.bBox.y, >=)) return false;
-		if (THRESHED_CMP(this->bBox.width, rhs.bBox.width, >=)) return false;
-		if (THRESHED_CMP(this->bBox.height, rhs.bBox.height, >=)) return false;
+		if (THRESHED_CMP(this->bBox.x, rhs.bBox.x, >=)) return true;
+		if (THRESHED_CMP(this->bBox.y, rhs.bBox.y, >=)) return true;
+		if (THRESHED_CMP(this->bBox.width, rhs.bBox.width, >=)) return true;
+		if (THRESHED_CMP(this->bBox.height, rhs.bBox.height, >=)) return true;
 #endif
 #ifdef STRICT_DIFF
-		return this->bBox == rhs.bBox;
+		return this->bBox != rhs.bBox;
 #endif
 
-		return true;
+		return false;
 	}
 
 	bool Valid() const
@@ -109,9 +116,19 @@ struct TrackingObject
 		return lastUpdate < 5;
 	}
 
+	bool CmpNameAndXY(const TrackingObject& rhs)
+	{
+		if (this->name != rhs.name) return false;
+		if (THRESHED_CMP(this->bBox.x, rhs.bBox.x, >=)) return false;
+		if (THRESHED_CMP(this->bBox.y, rhs.bBox.y, >=)) return false;
+
+		return true;
+	}
+
 	BBox bBox;
 	uint32_t score;
 	uint32_t trackingID;
+	uint32_t faceID;
 	std::string name;
 	int32_t lastCheck;
 	uint32_t lastUpdate;

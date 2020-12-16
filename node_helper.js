@@ -8,21 +8,20 @@ module.exports = NodeHelper.create({
 
 	cApp_start: function () {
 		const self = this;
-		self.gestureDet = spawn('modules/' + self.name + '/object_detection_ompss/build/start.sh',['modules/' + self.name + '/object-detection/build', self.config.image_width, self.config.image_height]);
+		self.gestureDet = spawn('modules/' + self.name + '/object_detection_ompss/build/startYoloTRT.sh',['modules/' + self.name + '/object-detection/build', self.config.image_width, self.config.image_height]);
 		self.gestureDet.stdout.on('data', (data) => {
 
 			var data_chunks = `${data}`.split('\n');
 			data_chunks.forEach( chunk => {
 
 				if (chunk.length > 0) {
-	
 				try{
 					var parsed_message = JSON.parse(chunk)
 
 					if (parsed_message.hasOwnProperty('DETECTED_GESTURES')){
 						//console.log("[" + self.name + "] Gestures detected : " + parsed_message);
 						self.sendSocketNotification('DETECTED_GESTURES', parsed_message);
-					}else if (parsed_message.hasOwnProperty('GESTURE_DET_FPS')){
+					} else if (parsed_message.hasOwnProperty('GESTURE_DET_FPS')){
 						//console.log("[" + self.name + "] " + JSON.stringify(parsed_message));
 						self.sendSocketNotification('GESTURE_DET_FPS', parsed_message.GESTURE_DET_FPS);
 					}else if (parsed_message.hasOwnProperty('STATUS')){
@@ -38,30 +37,24 @@ module.exports = NodeHelper.create({
 						console.log(err)
 					}
 				}
-  				//console.log(chunk);
+				//console.log(chunk);
 				}
 			});
 		});	
 
-
-
 		exec(`renice -n 20 -p ${self.gestureDet.pid}`,(error,stdout,stderr) => {
-				if (error) {
-					console.error(`exec error: ${error}`);
-  				}
-			});
-
-			self.gestureDet.on("exit", (code, signal) => {
-				if (code !== 0){
-					setTimeout(() => {self.cApp_start();}, 10)
-				}
-				console.log("gesture det:");
-				console.log("code: " + code);
-				console.log("signal: " + signal);
-
+			if (error) {
+				console.error(`exec error: ${error}`);
+			}
 		});
 
-		},
+		self.gestureDet.on("exit", (code, signal) => {
+			if (code !== 0){
+				setTimeout(() => {self.cApp_start();}, 10)
+			}
+			console.log("gesture det: " + "code=" + code + " signal=" + signal);
+		});
+	},
 
 
   	// Subclass socketNotificationReceived received.
