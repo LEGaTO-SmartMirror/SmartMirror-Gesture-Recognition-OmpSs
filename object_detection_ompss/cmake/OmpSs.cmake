@@ -145,7 +145,7 @@ function(ADD_EXECUTABLE_OMPSS)
     # Compile C main using MCC
     ADD_CUSTOM_COMMAND(OUTPUT ${MCC_OUTPUT_OBJ}
         COMMAND ${MCC} -c --ompss-2 ${OMPSS_EXE_MAIN} -o ${MCC_OUTPUT_OBJ} ${INCS_MCXX}
-        DEPENDS ${MCC_DEPENDS}
+        DEPENDS ${MCC_DEPENDS} ${OMPSS_EXE_MAIN}
         COMMENT "Compiling mcc main"
     )
 
