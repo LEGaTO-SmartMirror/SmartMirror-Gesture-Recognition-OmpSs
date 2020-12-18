@@ -1,7 +1,7 @@
 function(INIT_OMPSS)
     if(DEFINED ENV{OMPSS_HOME})
         set(OMPSS_HOME $ENV{OMPSS_HOME})
-        message("OMPSS_HOME=${OMPSS_HOME}")
+        message(STATUS "OMPSS_HOME=${OMPSS_HOME}")
         set(MCC ${OMPSS_HOME}/bin/mcc CACHE INTERNAL "C Mercurium Compiler")
         set(MCXX ${OMPSS_HOME}/bin/mcxx CACHE INTERNAL "C++ Mercurium Compiler")
         set(LIBS_MCXX "" CACHE INTERNAL "List of libraries for linking") # Reset the link library list
@@ -127,8 +127,6 @@ function(ADD_EXECUTABLE_OMPSS)
     if(NOT DEFINED OMPSS_EXE_OUTPUT_NAME)
         message(FATAL_ERROR "[ADD_OMPSS_EXECUTABLE]: Argument OUTPUT_NAME not specified, please provide a valid output name.")
     endif()
-
-    message(STATUS "TARGET_NAME=${OMPSS_EXE_TARGET_NAME}")
 
     if(NOT DEFINED OMPSS_EXE_TARGET_NAME)
         set(OMPSS_EXE_TARGET_NAME MAIN_MCC)
