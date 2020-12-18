@@ -82,13 +82,6 @@ int main(int argc, char **argv)
 	timeout.tv_usec = 0;
 	char message[BUFSIZ];
 
-	// Set env variables
-	// putenv("NANOS6=optimized");
-	// putenv("NANOS6_SCHEDULER=locality");
-	// putenv("NANOS6_CLUSTER_SCHEDULING_POLICY=locality");
-	// putenv("NANOS6_COMMUNICATION=mpi-2sided");
-	// putenv("NANOS6_LOCAL_MEMORY=8GB");
-
 	pData0 = (uint8_t *)_lmalloc(IMAGE_SIZE * sizeof(uint8_t), "data_struct_0");
 	pData1 = (uint8_t *)_lmalloc(IMAGE_SIZE * sizeof(uint8_t), "data_struct_1");
 
