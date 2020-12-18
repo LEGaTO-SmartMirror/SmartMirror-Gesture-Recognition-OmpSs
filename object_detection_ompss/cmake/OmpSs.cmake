@@ -2,11 +2,10 @@ function(INIT_OMPSS)
     if(DEFINED ENV{OMPSS_HOME})
         set(OMPSS_HOME $ENV{OMPSS_HOME})
         message("OMPSS_HOME=${OMPSS_HOME}")
-        set(NOS6_INCLUDE_DIRS ${OMPSS_HOME}/include)
-        set(NOS6_LIBRARY_PATH ${OMPSS_HOME}/lib)
         set(MCC ${OMPSS_HOME}/bin/mcc CACHE INTERNAL "C Mercurium Compiler")
         set(MCXX ${OMPSS_HOME}/bin/mcxx CACHE INTERNAL "C++ Mercurium Compiler")
         set(LIBS_MCXX "" CACHE INTERNAL "List of libraries for linking") # Reset the link library list
+        set(INCS_MCXX "" CACHE INTERNAL "List of include dirs for compiling") # Reset the include directory list
     else()
         message(FATAL_ERROR "Environment variable OMPSS_HOME not set")
     endif()
@@ -51,7 +50,7 @@ endfunction(PROCESS_LIB_STR)
 
 function(ADD_LIBRARY_DIR_OMPSS)
     if(${ARGC} EQUAL 0)
-        message(WARNING "ADD_LIBRARY_DIR_OMPSS called without any libraries")
+        message(WARNING "ADD_LIBRARY_DIR_OMPSS called without any library dirs")
         return()
     endif()
 
@@ -93,9 +92,31 @@ function(ADD_LIBRARY_OMPSS)
     set(LIBS_MCXX ${LIBS_MCXX} CACHE INTERNAL "List of libraries for linking")
 endfunction(ADD_LIBRARY_OMPSS)
 
-function(ADD_OMPSS_EXECUTABLE)
+function(ADD_INCLUDE_DIR_OMPSS)
+    if(${ARGC} EQUAL 0)
+        message(WARNING "ADD_INCLUDE_OMPSS called without any include dirs")
+        return()
+    endif()
+
+    foreach(ARG IN LISTS ARGV)
+        list(LENGTH ${ARG} LL)
+        # A list of length 0 is a single string
+        if(${LL} GREATER_EQUAL 1)
+            foreach(INC IN LISTS ${ARG})
+                list(APPEND INCS_MCXX "-I${INC}")
+            endforeach()
+        else()
+            list(APPEND INCS_MCXX "-I${ARG}")
+        endif()
+    endforeach()
+
+    set(INCS_MCXX ${INCS_MCXX} CACHE INTERNAL "List of include dirs for compiling")
+endfunction(ADD_INCLUDE_DIR_OMPSS)
+
+
+function(ADD_EXECUTABLE_OMPSS)
     # set(options OPTIONAL)
-    set(oneValueArgs MAIN OUTPUT_NAME)
+    set(oneValueArgs TARGET_NAME MAIN OUTPUT_NAME)
     set(multiValueArgs C_SRC CXX_SRC)
     cmake_parse_arguments(OMPSS_EXE "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -105,6 +126,12 @@ function(ADD_OMPSS_EXECUTABLE)
 
     if(NOT DEFINED OMPSS_EXE_OUTPUT_NAME)
         message(FATAL_ERROR "[ADD_OMPSS_EXECUTABLE]: Argument OUTPUT_NAME not specified, please provide a valid output name.")
+    endif()
+
+    message(STATUS "TARGET_NAME=${OMPSS_EXE_TARGET_NAME}")
+
+    if(NOT DEFINED OMPSS_EXE_TARGET_NAME)
+        set(OMPSS_EXE_TARGET_NAME MAIN_MCC)
     endif()
 
     set(MCC_OUTPUT_OBJ "mcc_main.o")
@@ -119,20 +146,40 @@ function(ADD_OMPSS_EXECUTABLE)
 
     # Compile C main using MCC
     ADD_CUSTOM_COMMAND(OUTPUT ${MCC_OUTPUT_OBJ}
-        COMMAND ${MCC} -c --ompss-2 ${OMPSS_EXE_MAIN} -o ${MCC_OUTPUT_OBJ}
+        COMMAND ${MCC} -c --ompss-2 ${OMPSS_EXE_MAIN} -o ${MCC_OUTPUT_OBJ} ${INCS_MCXX}
         DEPENDS ${MCC_DEPENDS}
         COMMENT "Compiling mcc main"
     )
 
+    if(DEFINED CMAKE_RUNTIME_OUTPUT_DIRECTORY)
+        set(FULL_OUTPUT_NAME "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${OMPSS_EXE_OUTPUT_NAME}")
+    else()
+        set(FULL_OUTPUT_NAME "${OMPSS_EXE_OUTPUT_NAME}")
+    endif()
+
     # Link everything using MCXX
     ADD_CUSTOM_COMMAND(OUTPUT ${OMPSS_EXE_OUTPUT_NAME}
-        COMMAND ${MCXX} --ompss-2 ${MCC_OUTPUT_OBJ} ${ADDITIONAL_OBJS} -o ${OMPSS_EXE_OUTPUT_NAME} ${LIBS_MCXX}
+        COMMAND ${MCXX} --ompss-2 ${MCC_OUTPUT_OBJ} ${ADDITIONAL_OBJS} -o ${FULL_OUTPUT_NAME} ${LIBS_MCXX}
         DEPENDS ${MCC_OUTPUT_OBJ}
         COMMENT "Linking mcc main"
     )
 
-    ADD_CUSTOM_TARGET(MAIN_MCC ALL
+    ADD_CUSTOM_TARGET(${OMPSS_EXE_TARGET_NAME} ALL
         DEPENDS ${MCC_OUTPUT_OBJ} ${OMPSS_EXE_OUTPUT_NAME}
         VERBATIM
     )
-endfunction(ADD_OMPSS_EXECUTABLE)
+endfunction(ADD_EXECUTABLE_OMPSS)
+
+function(COPY_BINARY_TO_HOST TARGET HOST USER REMOTE_PATH EXECUTABLE)
+    if(DEFINED CMAKE_RUNTIME_OUTPUT_DIRECTORY)
+        set(FULL_OUTPUT_NAME "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${EXECUTABLE}")
+    else()
+        set(FULL_OUTPUT_NAME "${EXECUTABLE}")
+    endif()
+    
+    ADD_CUSTOM_TARGET(SCP ALL
+        COMMAND scp ${FULL_OUTPUT_NAME} ${USER}@${HOST}:${REMOTE_PATH}/
+        DEPENDS ${TARGET}
+        COMMENT "Copying binary to remote host"
+    )
+endfunction(COPY_BINARY_TO_HOST)
