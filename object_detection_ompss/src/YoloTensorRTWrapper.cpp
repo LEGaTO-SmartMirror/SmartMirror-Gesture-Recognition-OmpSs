@@ -3,9 +3,16 @@
 #include "Timer.h"
 #include "YoloTRT.h"
 
+#include <inipp.h>
+
 #include <chrono>
 #include <iostream>
 #include <thread>
+
+// TODO: Sort and order all the global variables
+// Also add comments
+
+const float DEFAULT_YOLO_THRESHOLD = 0.35f; // Threshold used in case non is specified in the config
 
 const uint32_t WIDTH  = 416;
 const uint32_t HEIGHT = 416;
@@ -27,8 +34,138 @@ SORT* g_pSortTrackers;
 cv::Mat g_frame[MAX_BUFFERS];
 YoloTRT::YoloResults g_yoloResults[MAX_BUFFERS];
 
+inipp::Ini<char> g_ini;
+
+struct Settings
+{
+	Settings()
+	{
+		valid = false;
+	}
+
+	// This expects that section at least contains all the required items
+	Settings(inipp::Ini<char>::Section sec)
+	{
+		inipp::extract(sec["DLA_CORE"], dlaCore);
+		inipp::extract(sec["ONNX_FILE"], onnxFile);
+		inipp::extract(sec["CONFIG_FILE"], configFile);
+		inipp::extract(sec["ENGINE_FILE"], engineFile);
+		inipp::extract(sec["CLASS_FILE"], classFile);
+
+		inipp::extract(sec["DETECT_STR"], detectStr);
+		inipp::extract(sec["AMOUNT_STR"], amountStr);
+		inipp::extract(sec["FPS_STR"], fpsStr);
+
+		yoloType = YoloType::NON;
+		if(sec.count("YOLO_VERSION") > 0)
+		{
+			int32_t v;
+			inipp::extract(sec["YOLO_VERSION"], v);
+			if(v == 3)
+				yoloType |= YoloType::YOLO_V3;
+			else if(v == 4)
+				yoloType |= YoloType::YOLO_V4;
+			else
+				std::cerr << "Invalid version (" << sec["YOLO_VERSION"] << ") specified in YOLO_VERSION" << std::endl;
+		}
+
+		if(sec.count("YOLO_TINY") > 0)
+		{
+			std::string tiny;
+			inipp::extract(sec["YOLO_TINY"], tiny);
+			if(tiny == "true" || tiny == "TRUE")
+				yoloType |= YoloType::TINY;
+		}
+	
+		if(sec.count("YOLO_THRESHOLD") > 0)
+			inipp::extract(sec["YOLO_THRESHOLD"], yoloThreshold);
+		else
+			yoloThreshold = DEFAULT_YOLO_THRESHOLD;
+
+		valid = true;
+	}
+
+	friend std::ostream& operator<<(std::ostream& os, const Settings& s)
+	{
+		os << "ONNX-File     : " << s.onnxFile << std::endl
+		   << "Config-File   : " << s.configFile << std::endl
+		   << "Engine-File   : " << s.engineFile << std::endl
+		   << "Class-File    : " << s.classFile << std::endl
+		   << "DLA-Core      : " << s.dlaCore << std::endl
+		   << "Detect String : " << s.detectStr << std::endl
+		   << "Amount String : " << s.amountStr << std::endl
+		   << "FPS String    : " << s.fpsStr << std::endl
+		   << "Yolo Type     : " << s.yoloType << std::endl
+		   << "Yolo Threshold: " << s.yoloThreshold;
+	   return os;
+	}
+
+	bool valid;
+
+	int32_t dlaCore;
+	std::string onnxFile;
+	std::string configFile;
+	std::string engineFile;
+	std::string classFile;
+
+	std::string detectStr;
+	std::string amountStr;
+	std::string fpsStr;
+
+	YoloType yoloType;
+	float yoloThreshold;
+};
+
+Settings g_settings;
+
+bool checkConfigItemPresent(const std::string& item, const std::string& section = "")
+{
+	if (g_ini.sections[section].count(item) == 0)
+	{
+		std::cerr << "Item \"" << item << "\" not present in provided configuration" << std::endl;
+		return false;
+	}
+
+	return true;
+}
+
 extern "C"
 {
+	void PrintSettings()
+	{
+		if(g_settings.valid)
+			std::cout << g_settings << std::endl;
+		else
+			std::cerr << "[PrintSettings] Settings have not been initialized proprly" << std::endl;
+	}
+
+	bool ParseConfig(const char* pConfigFile)
+	{
+		std::ifstream is(pConfigFile);
+		if (!is.is_open())
+		{
+			std::cerr << "[ParseConfig] Failed to open config file: " << pConfigFile << std::endl;
+			return false;
+		}
+
+		g_ini.parse(is);
+		is.close();
+		inipp::Ini<char>::Section sec = g_ini.sections[""];
+
+		if (!checkConfigItemPresent("DLA_CORE")) return false;
+		if (!checkConfigItemPresent("ONNX_FILE")) return false;
+		if (!checkConfigItemPresent("CONFIG_FILE")) return false;
+		if (!checkConfigItemPresent("ENGINE_FILE")) return false;
+		if (!checkConfigItemPresent("CLASS_FILE")) return false;
+		if (!checkConfigItemPresent("DETECT_STR")) return false;
+		if (!checkConfigItemPresent("AMOUNT_STR")) return false;
+		if (!checkConfigItemPresent("FPS_STR")) return false;
+
+		g_settings = Settings(sec);
+
+		return true;
+	}
+
 	BBox ToCenter(const BBox& bBox)
 	{
 		// x_y = center
@@ -44,7 +181,7 @@ extern "C"
 		g_cap.open(pStr);
 		if (!g_cap.isOpened())
 		{
-			std::cerr << "Unable to open video stream: " << pStr << std::endl;
+			std::cerr << "[InitVideoStream] Unable to open video stream: " << pStr << std::endl;
 			return 0;
 		}
 
@@ -54,12 +191,24 @@ extern "C"
 		return 1;
 	}
 
-	void InitYoloTensorRT(const char* pOnnxFile, const char* pConfigFile, const char* pEngineFile, const char* pClassFile, const int32_t dlaCore)
+	int InitYoloTensorRT(const char* pConfigFile)
 	{
+		if (!ParseConfig(pConfigFile))
+		{
+			std::cout << "[InitYoloTensorRT] Unable to parse provided config or config does not contain all required values" << std::endl;
+			return 0;
+		}
+
+		int32_t dlaCore = g_settings.dlaCore;
+		std::string onnxFile   = g_settings.onnxFile;
+		std::string configFile = g_settings.configFile;
+		std::string engineFile = g_settings.engineFile;
+		std::string classFile  = g_settings.classFile;
+
 		// Set TensorRT log level
 		TrtLog::gLogger.setReportableSeverity(TrtLog::Severity::kWARNING);
 
-		g_pYolo = new YoloTRT(std::string(pOnnxFile), std::string(pConfigFile), std::string(pEngineFile), std::string(pClassFile), dlaCore, true, 0.35f);
+		g_pYolo = new YoloTRT(onnxFile, configFile, engineFile, classFile, dlaCore, true, g_settings.yoloThreshold, g_settings.yoloType);
 
 		g_pSortTrackers = new SORT[YoloTRT::GetClassCount()];
 
@@ -69,12 +218,14 @@ extern "C"
 
 		// Set last tracking count to 0
 		g_lastTrackings.clear();
+
+		return 1;
 	}
 
 	void PrintDetections(const TrackingObjects& trackers)
 	{
 		std::stringstream str("");
-		str << "{\"DETECTED_GESTURES\": [";
+		str << string_format("{\"%s\": [", g_settings.detectStr.c_str());
 
 		for (const auto& [i, t] : enumerate(trackers))
 		{
@@ -86,8 +237,8 @@ extern "C"
 
 		g_lastTrackings = trackers;
 
-		str << string_format("], \"DETECTED_GESTURES_AMOUNT\": %llu }\n", g_lastTrackings.size());
-		std::cout << str.str() << std::flush;
+		str << string_format("], \"%s\": %llu }", g_settings.amountStr.c_str(), g_lastTrackings.size());
+		std::cout << str.str() << std::endl;
 	}
 
 	void ProcessDetections(const uint8_t buffer)
@@ -144,7 +295,6 @@ extern "C"
 			std::size_t size = frame.total() * frame.channels();
 			cv::Mat flat     = frame.reshape(1, size);
 			std::memcpy(pData, flat.ptr(), size);
-			// cv::imwrite("out1.jpg", frame);
 		}
 	}
 
@@ -157,9 +307,6 @@ extern "C"
 
 	void ProcessNextFrame(const uint8_t buffer)
 	{
-		// cv::Mat frame = cv::Mat(height, width, CV_8UC3, pData);
-		// cv::imwrite("out2.jpg", frame);
-
 		if (!g_frame[buffer % MAX_BUFFERS].empty())
 			g_yoloResults[buffer % MAX_BUFFERS] = g_pYolo->Infer(g_frame[buffer % MAX_BUFFERS]);
 	}
@@ -186,18 +333,24 @@ extern "C"
 		if (g_elapsedTime >= ONE_SECOND)
 		{
 			if (fps > maxFPS) fps = maxFPS;
-			// std::cout << "Frames: " << (*pFrameCnt) << "| Time: " << g_timer
-			// 		  << " | Avg Time: " << g_elapsedTime / (*pFrameCnt)
-			// 		  << " | FPS: " << 1000 / (g_elapsedTime / (*pFrameCnt)) << std::endl;
 
-			std::cout << string_format("{\"GESTURE_DET_FPS\": %.2f, \"Iteration\": %d, \"maxFPS\": %.2f, \"lastCurrMSec\": %.2f}\n",
-									   fps, iteration, maxFPS, itrTime)
-					  << std::flush;
+			PrintFPS(fps, iteration, maxFPS, itrTime);
 
 			*pFrameCnt    = 0;
 			g_elapsedTime = 0;
 		}
 
 		g_timer.Start();
+	}
+
+	void PrintFPS(const float fps, const uint64_t iteration, const float maxFPS, const float itrTime)
+	{
+		if(fps == 0.0f)
+			std::cout << string_format("{\"%s\": 0.0}", g_settings.fpsStr.c_str()) << std::endl;
+		else
+		{
+			std::cout << string_format("{\"%s\": %.2f, \"Iteration\": %d, \"maxFPS\": %.2f, \"lastCurrMSec\": %.2f}",
+									   g_settings.fpsStr.c_str(), fps, iteration, maxFPS, itrTime) << std::endl;
+		}
 	}
 }

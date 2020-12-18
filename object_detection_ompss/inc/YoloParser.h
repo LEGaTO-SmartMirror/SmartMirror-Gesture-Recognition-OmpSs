@@ -57,12 +57,28 @@ inline YoloType operator&(YoloType a, YoloType b)
 inline YoloType& operator|=(YoloType& a, YoloType b)
 {
 	return a = a | b;
-	;
 }
 
 inline YoloType& operator|=(YoloType& a, int b)
 {
 	return a = a | static_cast<YoloType>(b);
+}
+
+std::ostream& operator<<(std::ostream& os, YoloType f)
+{
+	if(f == YoloType::NON)
+		os << "NON";
+	else
+	{
+		if((f & YoloType::YOLO_V3) == YoloType::YOLO_V3)
+			os << "Yolo v3";
+		if((f & YoloType::YOLO_V4) == YoloType::YOLO_V4)
+			os << "Yolo v4";
+		if((f & YoloType::TINY) == YoloType::TINY)
+			os << " Tiny";
+	}
+
+	return os;
 }
 
 class YoloParser

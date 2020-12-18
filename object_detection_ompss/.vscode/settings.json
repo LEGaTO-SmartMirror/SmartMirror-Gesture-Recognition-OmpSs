@@ -66,7 +66,10 @@
         "tensor": "cpp",
         "codecvt": "cpp",
         "filesystem": "cpp",
-        "*.inc": "cpp"
+        "*.inc": "cpp",
+        "locale": "cpp",
+        "__nullptr": "cpp",
+        "__bit_reference": "cpp"
     },
     "git.ignoreLimitWarning": true,
     "license-header-manager.excludeFolders": [

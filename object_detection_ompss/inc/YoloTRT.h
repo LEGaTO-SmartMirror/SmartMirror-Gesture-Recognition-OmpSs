@@ -120,7 +120,7 @@ public:
 public:
 	YoloTRT(const std::string &onnxFile, const std::string &configFile, const std::string &engineFile,
 			const std::string &classFile, const int32_t &dlaCore = 0, const bool &autoLoad = false,
-			const float &threshold = 0.3f) :
+			const float &threshold = 0.3f, const YoloType yoloType = YoloType::NON) :
 		m_onnxFile(onnxFile),
 		m_engineFile(engineFile),
 		m_dlaCore(dlaCore),
@@ -130,7 +130,7 @@ public:
 		m_outputLayer(),
 		m_verbose(false),
 		m_imgSize(0, 0),
-		m_yoloParser(configFile, YoloType::YOLO_V4 | YoloType::TINY),
+		m_yoloParser(configFile, yoloType),
 		m_threshold(threshold)
 	{
 		parseClassFile(classFile);

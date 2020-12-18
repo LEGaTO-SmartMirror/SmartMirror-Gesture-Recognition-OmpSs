@@ -23,11 +23,7 @@
 #define IMAGE_HEIGHT 416
 #define CHANNELS     3
 
-#define ONNX_FILE   "../data/yolov4-tiny-hand-3l.onnx"
-#define CONFIG_FILE "../data/yolov4-tiny-hand-3l.cfg"
-#define ENGINE_FILE "../data/yolov4-tiny-hand-3l.engine" // If the engine file is not present the engine is build
-#define CLASS_FILE  "../data/hand.names"
-#define DLA_CORE    1 /* (Valid DLA-Cores: 0 or 1) -1 disables the usage of DLAs */
+#define CONFIG_FILE "config.ini"
 
 #define _assert(cond)                                                  \
 	{                                                                  \
@@ -88,6 +84,14 @@ int main(int argc, char **argv)
 	// Set last frame count to 0
 	frameCnt = 0;
 
+	if (ParseConfig(CONFIG_FILE) != 1)
+	{
+		fprintf(stderr, "Unable to parse provided config or config does not contain all required values\n");
+		return -1;
+	}
+
+	PrintSettings();
+
 	// Wait for image handler to boot up
 	sleep(5);
 
@@ -105,7 +109,11 @@ int main(int argc, char **argv)
 #pragma oss task node(1) label("init_node_1")
 	{
 		printf("{\"STATUS\": \"initilize everything on node 1\"}\n");
-		InitYoloTensorRT(ONNX_FILE, CONFIG_FILE, ENGINE_FILE, CLASS_FILE, DLA_CORE);
+		if (InitYoloTensorRT(CONFIG_FILE) != 1)
+		{
+			fprintf(stderr, "Failed to init Yolo, exiting ...\n");
+			exit(-1);
+		}
 	}
 
 #pragma oss taskwait
@@ -130,8 +138,7 @@ int main(int argc, char **argv)
 		if (maxFPS == 0)
 		{
 			sleep(1);
-			printf("{\"GESTURE_DET_FPS\": 0.0}\n");
-			fflush(stdout);
+			PrintFPS(0.0f, 0, 0.0f, 0.0f);
 			continue;
 		}
 

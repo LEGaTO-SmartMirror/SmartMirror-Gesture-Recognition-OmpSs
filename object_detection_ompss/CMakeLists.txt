@@ -26,6 +26,7 @@ include_directories(
     ${OpenCV_INCLUDE_DIRS}
     inc
     inc/3rdParty/nvidia
+    inc/3rdParty/inipp
 )
 
 file(GLOB cpp_src "src/*.cpp")
