@@ -8,7 +8,7 @@ module.exports = NodeHelper.create({
 
 	cApp_start: function () {
 		const self = this;
-		self.gestureDet = spawn('modules/' + self.name + '/object_detection_ompss/build/startYoloTRT.sh',['modules/' + self.name + '/object-detection/build', self.config.image_width, self.config.image_height]);
+		self.gestureDet = spawn('modules/' + self.name + '/object_detection_ompss/bin/start.sh',['modules/' + self.name + '/object-detection/bin', self.config.image_width, self.config.image_height]);
 		self.gestureDet.stdout.on('data', (data) => {
 
 			var data_chunks = `${data}`.split('\n');
