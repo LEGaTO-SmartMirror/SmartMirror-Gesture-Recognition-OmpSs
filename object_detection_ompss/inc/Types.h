@@ -33,7 +33,7 @@
 using BBox   = cv::Rect2f;
 using BBoxes = std::vector<BBox>;
 
-#if !defined(THRESHOLDED_DIFF)
+#ifndef THRESHOLDED_DIFF
 #ifdef DIFF_THRESHOLD // In case THRESHOLDED_DIFF is not defined but DIFF_THRESHOLD is defined, define THRESHOLDED_DIFF
 #define THRESHOLDED_DIFF
 #else

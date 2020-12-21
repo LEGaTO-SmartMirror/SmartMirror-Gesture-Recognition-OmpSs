@@ -63,8 +63,6 @@ class YoloTRT
 {
 	inline static const std::string INPUT_LAYER = "000_net";
 
-	inline static const bool USE_FP16 = true;
-
 	inline static const bool FORCE_REBUILD = false;
 
 	template<typename T>
@@ -119,11 +117,12 @@ public:
 
 public:
 	YoloTRT(const std::string &onnxFile, const std::string &configFile, const std::string &engineFile,
-			const std::string &classFile, const int32_t &dlaCore = 0, const bool &autoLoad = false,
-			const float &threshold = 0.3f, const YoloType yoloType = YoloType::NON) :
+			const std::string &classFile, const int32_t &dlaCore = 0, const bool &useFP16 = false,
+			const bool &autoLoad = false, const float &threshold = 0.3f, const YoloType yoloType = YoloType::NON) :
 		m_onnxFile(onnxFile),
 		m_engineFile(engineFile),
 		m_dlaCore(dlaCore),
+		m_useFP16(useFP16),
 		m_engine(nullptr),
 		m_context(nullptr),
 		m_buffers(nullptr),
@@ -371,7 +370,7 @@ private:
 		config->setMaxWorkspaceSize(((size_t)1) << 30);
 		config->setFlag(nvinfer1::BuilderFlag::kGPU_FALLBACK);
 
-		if (USE_FP16)
+		if (m_useFP16)
 			config->setFlag(nvinfer1::BuilderFlag::kFP16);
 
 		samplesCommon::enableDLA(builder.get(), config.get(), m_dlaCore);
@@ -527,6 +526,7 @@ private:
 	std::string m_onnxFile;
 	std::string m_engineFile;
 	int32_t m_dlaCore;
+	bool m_useFP16;
 
 	std::shared_ptr<nvinfer1::ICudaEngine> m_engine;
 	InferUniquePtr<nvinfer1::IExecutionContext> m_context;

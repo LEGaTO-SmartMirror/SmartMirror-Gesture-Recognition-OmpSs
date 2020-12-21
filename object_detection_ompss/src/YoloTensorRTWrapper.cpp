@@ -1,3 +1,8 @@
+/* Threshold used when comparing two bounding boxes
+   needs to be defined before YoloTensorRTWrapper.h
+ */
+#define DIFF_THRESHOLD 0.005
+
 #include "YoloTensorRTWrapper.h"
 #include "SORT.h"
 #include "Timer.h"
@@ -56,28 +61,37 @@ struct Settings
 		inipp::extract(sec["AMOUNT_STR"], amountStr);
 		inipp::extract(sec["FPS_STR"], fpsStr);
 
+		inipp::extract(sec["IMAGE_WIDTH"], imgWidth);
+		inipp::extract(sec["IMAGE_HEIGHT"], imgHeight);
+		inipp::extract(sec["IMAGE_CHANNEL"], imgChannel);
+
+		if (sec.count("USE_FP16") > 0)
+			inipp::extract(sec["USE_FP16"], useFP16);
+		else
+			useFP16 = false;
+
 		yoloType = YoloType::NON;
-		if(sec.count("YOLO_VERSION") > 0)
+		if (sec.count("YOLO_VERSION") > 0)
 		{
 			int32_t v;
 			inipp::extract(sec["YOLO_VERSION"], v);
-			if(v == 3)
+			if (v == 3)
 				yoloType |= YoloType::YOLO_V3;
-			else if(v == 4)
+			else if (v == 4)
 				yoloType |= YoloType::YOLO_V4;
 			else
 				std::cerr << "Invalid version (" << sec["YOLO_VERSION"] << ") specified in YOLO_VERSION" << std::endl;
 		}
 
-		if(sec.count("YOLO_TINY") > 0)
+		if (sec.count("YOLO_TINY") > 0)
 		{
 			std::string tiny;
 			inipp::extract(sec["YOLO_TINY"], tiny);
-			if(tiny == "true" || tiny == "TRUE")
+			if (tiny == "true" || tiny == "TRUE")
 				yoloType |= YoloType::TINY;
 		}
-	
-		if(sec.count("YOLO_THRESHOLD") > 0)
+
+		if (sec.count("YOLO_THRESHOLD") > 0)
 			inipp::extract(sec["YOLO_THRESHOLD"], yoloThreshold);
 		else
 			yoloThreshold = DEFAULT_YOLO_THRESHOLD;
@@ -92,17 +106,22 @@ struct Settings
 		   << "Engine-File   : " << s.engineFile << std::endl
 		   << "Class-File    : " << s.classFile << std::endl
 		   << "DLA-Core      : " << s.dlaCore << std::endl
+		   << "Use FP16      : " << s.useFP16 << std::endl
 		   << "Detect String : " << s.detectStr << std::endl
 		   << "Amount String : " << s.amountStr << std::endl
 		   << "FPS String    : " << s.fpsStr << std::endl
+		   << "Image Width   : " << s.imgWidth << std::endl
+		   << "Image Height  : " << s.imgHeight << std::endl
+		   << "Image Channel : " << s.imgChannel << std::endl
 		   << "Yolo Type     : " << s.yoloType << std::endl
 		   << "Yolo Threshold: " << s.yoloThreshold;
-	   return os;
+		return os;
 	}
 
 	bool valid;
 
 	int32_t dlaCore;
+	bool useFP16;
 	std::string onnxFile;
 	std::string configFile;
 	std::string engineFile;
@@ -111,6 +130,10 @@ struct Settings
 	std::string detectStr;
 	std::string amountStr;
 	std::string fpsStr;
+
+	int32_t imgWidth;
+	int32_t imgHeight;
+	int32_t imgChannel;
 
 	YoloType yoloType;
 	float yoloThreshold;
@@ -129,15 +152,38 @@ bool checkConfigItemPresent(const std::string& item, const std::string& section 
 	return true;
 }
 
+BBox toCenter(const BBox& bBox)
+{
+	// x_y = center
+	float h = bBox.height;
+	float w = bBox.width;
+	float x = bBox.x + (w / 2);
+	float y = bBox.y + (h / 2);
+	return BBox(x, y, w, h);
+}
+
+void printDetections(const TrackingObjects& trackers)
+{
+	std::stringstream str("");
+	str << string_format("{\"%s\": [", g_settings.detectStr.c_str());
+
+	for (const auto& [i, t] : enumerate(trackers))
+	{
+		BBox centerBox = toCenter(t.bBox);
+		str << string_format("{\"TrackID\": %i, \"name\": \"%s\", \"center\": [%.5f,%.5f], \"w_h\": [%.5f,%.5f]}", t.trackingID, t.name.c_str(), centerBox.x, centerBox.y, centerBox.width, centerBox.height);
+		// Prevent a trailing ',' for the last element
+		if (i + 1 < trackers.size()) str << ", ";
+	}
+
+	g_lastTrackings = trackers;
+
+	str << string_format("], \"%s\": %llu }", g_settings.amountStr.c_str(), g_lastTrackings.size());
+	std::cout << str.str() << std::endl;
+}
+
 extern "C"
 {
-	void PrintSettings()
-	{
-		if(g_settings.valid)
-			std::cout << g_settings << std::endl;
-		else
-			std::cerr << "[PrintSettings] Settings have not been initialized proprly" << std::endl;
-	}
+	// ======= Config Functions =======
 
 	bool ParseConfig(const char* pConfigFile)
 	{
@@ -160,21 +206,57 @@ extern "C"
 		if (!checkConfigItemPresent("DETECT_STR")) return false;
 		if (!checkConfigItemPresent("AMOUNT_STR")) return false;
 		if (!checkConfigItemPresent("FPS_STR")) return false;
+		if (!checkConfigItemPresent("IMAGE_WIDTH")) return false;
+		if (!checkConfigItemPresent("IMAGE_HEIGHT")) return false;
+		if (!checkConfigItemPresent("IMAGE_CHANNEL")) return false;
 
 		g_settings = Settings(sec);
 
 		return true;
 	}
 
-	BBox ToCenter(const BBox& bBox)
+	void PrintSettings()
 	{
-		// x_y = center
-		float h = bBox.height;
-		float w = bBox.width;
-		float x = bBox.x + (w / 2);
-		float y = bBox.y + (h / 2);
-		return BBox(x, y, w, h);
+		if (g_settings.valid)
+			std::cout << g_settings << std::endl;
+		else
+			std::cerr << "[PrintSettings] Settings have not been initialized proprly" << std::endl;
 	}
+
+	int32_t GetImageWidth()
+	{
+		if (g_settings.valid)
+			return g_settings.imgWidth;
+		else
+		{
+			std::cerr << "[GetImageWidth] Settings have not been initialized proprly" << std::endl;
+			return -1;
+		}
+	}
+
+	int32_t GetImageHeight()
+	{
+		if (g_settings.valid)
+			return g_settings.imgHeight;
+		else
+		{
+			std::cerr << "[GetImageHeight] Settings have not been initialized proprly" << std::endl;
+			return -1;
+		}
+	}
+
+	int32_t GetImageChannel()
+	{
+		if (g_settings.valid)
+			return g_settings.imgChannel;
+		else
+		{
+			std::cerr << "[GetImageChannel] Settings have not been initialized proprly" << std::endl;
+			return -1;
+		}
+	}
+
+	// ======= Init Functions =======
 
 	int InitVideoStream(const char* pStr)
 	{
@@ -195,20 +277,16 @@ extern "C"
 	{
 		if (!ParseConfig(pConfigFile))
 		{
-			std::cout << "[InitYoloTensorRT] Unable to parse provided config or config does not contain all required values" << std::endl;
+			std::cerr << "[InitYoloTensorRT] Unable to parse provided config or config does not contain all required values" << std::endl;
 			return 0;
 		}
-
-		int32_t dlaCore = g_settings.dlaCore;
-		std::string onnxFile   = g_settings.onnxFile;
-		std::string configFile = g_settings.configFile;
-		std::string engineFile = g_settings.engineFile;
-		std::string classFile  = g_settings.classFile;
 
 		// Set TensorRT log level
 		TrtLog::gLogger.setReportableSeverity(TrtLog::Severity::kWARNING);
 
-		g_pYolo = new YoloTRT(onnxFile, configFile, engineFile, classFile, dlaCore, true, g_settings.yoloThreshold, g_settings.yoloType);
+		g_pYolo = new YoloTRT(g_settings.onnxFile, g_settings.configFile, g_settings.engineFile,
+							  g_settings.classFile, g_settings.dlaCore, g_settings.useFP16,
+							  true, g_settings.yoloThreshold, g_settings.yoloType);
 
 		g_pSortTrackers = new SORT[YoloTRT::GetClassCount()];
 
@@ -222,29 +300,31 @@ extern "C"
 		return 1;
 	}
 
-	void PrintDetections(const TrackingObjects& trackers)
+	// ======= Processing Functions =======
+
+	void GetNextFrame(uint8_t* pData)
 	{
-		std::stringstream str("");
-		str << string_format("{\"%s\": [", g_settings.detectStr.c_str());
-
-		for (const auto& [i, t] : enumerate(trackers))
+		if (!pData) return;
+		cv::Mat frame;
+		if (g_cap.read(frame))
 		{
-			BBox centerBox = ToCenter(t.bBox);
-			str << string_format("{\"TrackID\": %i, \"name\": \"%s\", \"center\": [%.5f,%.5f], \"w_h\": [%.5f,%.5f]}", t.trackingID, t.name.c_str(), centerBox.x, centerBox.y, centerBox.width, centerBox.height);
-			// Prevent a trailing ',' for the last element
-			if (i + 1 < trackers.size()) str << ", ";
+			std::size_t size = frame.total() * frame.channels();
+			cv::Mat flat     = frame.reshape(1, size);
+			std::memcpy(pData, flat.ptr(), size);
 		}
-
-		g_lastTrackings = trackers;
-
-		str << string_format("], \"%s\": %llu }", g_settings.amountStr.c_str(), g_lastTrackings.size());
-		std::cout << str.str() << std::endl;
 	}
 
+	void ProcessNextFrame(const uint8_t buffer)
+	{
+		if (!g_frame[buffer % MAX_BUFFERS].empty())
+			g_yoloResults[buffer % MAX_BUFFERS] = g_pYolo->Infer(g_frame[buffer % MAX_BUFFERS]);
+	}
+	int32_t init = 0;
 	void ProcessDetections(const uint8_t buffer)
 	{
 		bool changed                        = false;
 		const YoloTRT::YoloResults& results = g_yoloResults[buffer % MAX_BUFFERS];
+		cv::Mat frame                       = g_frame[buffer % MAX_BUFFERS];
 
 		std::map<uint32_t, TrackingObjects> trackingDets;
 
@@ -283,38 +363,31 @@ extern "C"
 		}
 
 		if (changed)
-			PrintDetections(trackers);
+			printDetections(trackers);
+
+		if (init > 2)
+		{
+			for (const TrackingObject& obj : trackers)
+			{
+				int32_t x = obj.bBox.x * 416;
+				int32_t y = obj.bBox.y * 416;
+				int32_t w = obj.bBox.width * 416;
+				int32_t h = obj.bBox.height * 416;
+				cv::rectangle(frame, cv::Point(x, y), cv::Point(x + w, y + h), cv::Scalar(0, 255, 0));
+				cv::putText(frame, obj.name, cv::Point(x, y - 10), cv::FONT_HERSHEY_DUPLEX, 1, CV_RGB(255, 50, 50), 1);
+			}
+			imwrite("out.jpg", frame);
+		}
+		init++;
 	}
 
-	void GetNextFrame(uint8_t* pData)
-	{
-		if (!pData) return;
-		cv::Mat frame;
-		if (g_cap.read(frame))
-		{
-			std::size_t size = frame.total() * frame.channels();
-			cv::Mat flat     = frame.reshape(1, size);
-			std::memcpy(pData, flat.ptr(), size);
-		}
-	}
+	// ======= Utility Functions =======
 
 	void c2CvMat(uint8_t* pData, const int32_t height, const int32_t width, const uint8_t buffer)
 	{
 		if (pData == nullptr) return;
 
 		g_frame[buffer % MAX_BUFFERS] = cv::Mat(height, width, CV_8UC3, pData);
-	}
-
-	void ProcessNextFrame(const uint8_t buffer)
-	{
-		if (!g_frame[buffer % MAX_BUFFERS].empty())
-			g_yoloResults[buffer % MAX_BUFFERS] = g_pYolo->Infer(g_frame[buffer % MAX_BUFFERS]);
-	}
-
-	void Cleanup()
-	{
-		delete g_pYolo;
-		delete[] g_pSortTrackers;
 	}
 
 	void CheckFPS(uint32_t* pFrameCnt, const uint64_t iteration, const float maxFPS)
@@ -345,12 +418,19 @@ extern "C"
 
 	void PrintFPS(const float fps, const uint64_t iteration, const float maxFPS, const float itrTime)
 	{
-		if(fps == 0.0f)
+		if (fps == 0.0f)
 			std::cout << string_format("{\"%s\": 0.0}", g_settings.fpsStr.c_str()) << std::endl;
 		else
 		{
 			std::cout << string_format("{\"%s\": %.2f, \"Iteration\": %d, \"maxFPS\": %.2f, \"lastCurrMSec\": %.2f}",
-									   g_settings.fpsStr.c_str(), fps, iteration, maxFPS, itrTime) << std::endl;
+									   g_settings.fpsStr.c_str(), fps, iteration, maxFPS, itrTime)
+					  << std::endl;
 		}
+	}
+
+	void Cleanup()
+	{
+		delete g_pYolo;
+		delete[] g_pSortTrackers;
 	}
 }

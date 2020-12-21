@@ -10,11 +10,6 @@
 #include <nanos6/cluster.h>
 #include <nanos6/debug.h>
 
-/* Threshold used when comparing two bounding boxes
-   needs to be defined before YoloTensorRTWrapper.h
- */
-#define DIFF_THRESHOLD 0.005
-
 #include <YoloTensorRTWrapper.h>
 
 #define ITERATION_CAP 2000000000
@@ -64,7 +59,7 @@ int main(int argc, char **argv)
 {
 	float maxFPS = 30.0f;
 	char capStr[BUFSIZ];
-	const int32_t IMAGE_SIZE = IMAGE_HEIGHT * IMAGE_WIDTH * CHANNELS;
+	int32_t imageSize; // = IMAGE_HEIGHT * IMAGE_WIDTH * CHANNELS;
 	uint8_t *pData0;
 	uint8_t *pData1;
 	uint32_t frameCnt;
@@ -78,12 +73,6 @@ int main(int argc, char **argv)
 	timeout.tv_usec = 0;
 	char message[BUFSIZ];
 
-	pData0 = (uint8_t *)_lmalloc(IMAGE_SIZE * sizeof(uint8_t), "data_struct_0");
-	pData1 = (uint8_t *)_lmalloc(IMAGE_SIZE * sizeof(uint8_t), "data_struct_1");
-
-	// Set last frame count to 0
-	frameCnt = 0;
-
 	if (ParseConfig(CONFIG_FILE) != 1)
 	{
 		fprintf(stderr, "Unable to parse provided config or config does not contain all required values\n");
@@ -91,6 +80,14 @@ int main(int argc, char **argv)
 	}
 
 	PrintSettings();
+
+	imageSize = GetImageWidth() * GetImageHeight() * GetImageChannel();
+
+	pData0 = (uint8_t *)_lmalloc(imageSize * sizeof(uint8_t), "data_struct_0");
+	pData1 = (uint8_t *)_lmalloc(imageSize * sizeof(uint8_t), "data_struct_1");
+
+	// Set last frame count to 0
+	frameCnt = 0;
 
 	// Wait for image handler to boot up
 	sleep(5);
@@ -146,7 +143,7 @@ int main(int argc, char **argv)
 		{
 			GetNextFrame(pData0);
 
-#pragma oss task in(pData0[0; IMAGE_SIZE])node(1) label("even_copy")
+#pragma oss task in(pData0[0; imageSize])node(1) label("even_copy")
 			{
 				c2CvMat(pData0, IMAGE_HEIGHT, IMAGE_WIDTH, 1);
 			} /* end task */
@@ -164,7 +161,7 @@ int main(int argc, char **argv)
 		{
 			GetNextFrame(pData1);
 
-#pragma oss task in(pData1[0; IMAGE_SIZE])node(1) label("odd_copy")
+#pragma oss task in(pData1[0; imageSize])node(1) label("odd_copy")
 			{
 				c2CvMat(pData1, IMAGE_HEIGHT, IMAGE_WIDTH, 0);
 			} /* end task */
@@ -191,8 +188,8 @@ int main(int argc, char **argv)
 
 	Cleanup();
 
-	_lfree(pData0, IMAGE_SIZE * sizeof(uint8_t));
-	_lfree(pData1, IMAGE_SIZE * sizeof(uint8_t));
+	_lfree(pData0, imageSize * sizeof(uint8_t));
+	_lfree(pData1, imageSize * sizeof(uint8_t));
 
 	return 0;
 }
