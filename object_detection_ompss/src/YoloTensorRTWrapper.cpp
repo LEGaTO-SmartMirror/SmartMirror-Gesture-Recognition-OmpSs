@@ -400,11 +400,11 @@ extern "C"
 
 	// ======= Utility Functions =======
 
-	void C2CvMat(uint8_t* pData, const int32_t height, const int32_t width, const uint8_t buffer)
+	void C2CvMat(uint8_t* pData, const uint8_t buffer)
 	{
 		if (pData == nullptr) return;
 
-		g_frame[buffer % MAX_BUFFERS] = cv::Mat(height, width, CV_8UC3, pData);
+		g_frame[buffer % MAX_BUFFERS] = cv::Mat(GetImageHeight(), GetImageWidth(), CV_8UC3, pData);
 	}
 
 	void CheckFPS(uint32_t* pFrameCnt, const uint64_t iteration, const float maxFPS)

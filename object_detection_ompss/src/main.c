@@ -148,9 +148,9 @@ int main(int argc, char** argv)
 		{
 			GetNextFrame(pData0);
 
-#pragma oss task in(pData0[0; imageSize], imgWidth, imgHeight)node(1) label("even_copy")
+#pragma oss task in(pData0[0; imageSize])node(1) label("even_copy")
 			{
-				C2CvMat(pData0, imgHeight, imgWidth, 1);
+				C2CvMat(pData0, 1);
 			} /* end task */
 
 #pragma oss task node(1) label("process_frame_0")
@@ -166,9 +166,9 @@ int main(int argc, char** argv)
 		{
 			GetNextFrame(pData1);
 
-#pragma oss task in(pData1[0; imageSize], imgWidth, imgHeight)node(1) label("odd_copy")
+#pragma oss task in(pData1[0; imageSize])node(1) label("odd_copy")
 			{
-				C2CvMat(pData1, imgHeight, imgWidth, 0);
+				C2CvMat(pData1, 0);
 			} /* end task */
 
 #pragma oss task node(1) label("process_frame_1")

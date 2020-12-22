@@ -23,7 +23,7 @@ extern "C"
 	void ProcessDetections(const uint8_t buffer);
 
 	// ======= Utility Functions =======
-	void C2CvMat(uint8_t* pData, const int32_t height, const int32_t width, const uint8_t buffer);
+	void C2CvMat(uint8_t* pData, const uint8_t buffer);
 	void CheckFPS(uint32_t* pFrameCnt, const uint64_t iteration, const float maxFPS);
 	void PrintFPS(const float fps, const uint64_t iteration, const float maxFPS, const float itrTime);
 	void PrintStartString();
