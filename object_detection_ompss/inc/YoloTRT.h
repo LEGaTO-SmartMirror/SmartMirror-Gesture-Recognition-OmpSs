@@ -57,7 +57,7 @@
 
 namespace fs = std::experimental::filesystem;
 
-DEFINE_EXCEPTION(YoloTRTException);
+DEFINE_EXCEPTION(YoloTRTException)
 
 class YoloTRT
 {
@@ -167,7 +167,7 @@ public:
 
 		// ==== Inference ====
 
-		YoloResults results = processOutput(img);
+		YoloResults results = processOutput();
 
 		// std::cout << "Inference-Timer: " << timer << std::endl;
 
@@ -215,8 +215,6 @@ private:
 		m_buffers = std::make_shared<samplesCommon::BufferManager>(m_engine);
 	}
 
-	InferUniquePtr<nvinfer1::IBuilderConfig> config;
-
 	void loadEngine()
 	{
 		// auto builder = InferUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(TrtLog::gLogger.getTRTLogger()));
@@ -229,7 +227,7 @@ private:
 		// if (!network)
 		// 	throw(YoloTRTException("Failed to create Network"));
 
-		// config = InferUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+		// auto config = InferUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
 		// if (!config)
 		// 	throw(YoloTRTException("Failed to create BuilderConfig"));
 
@@ -478,7 +476,7 @@ private:
 		return out;
 	}
 
-	YoloResults processOutput(const cv::Mat& img)
+	YoloResults processOutput()
 	{
 		std::map<int32_t, YoloResults> results;
 		YoloResults validResults;
@@ -489,7 +487,7 @@ private:
 			const YoloResult* pResults = static_cast<const YoloResult*>(m_buffers->getHostBuffer(outLayer));
 
 			// Print output values for each index
-			for (int i = 0; i < gridSize * 3; i++)
+			for (uint32_t i = 0; i < gridSize * 3; i++)
 			{
 				const YoloResult& res = pResults[i];
 				if (res.boxConfidence * res.classProb > m_threshold)
@@ -499,18 +497,10 @@ private:
 
 		for (auto& [classID, results] : results)
 		{
+			UNUSED(classID);
 			YoloResults nms = nmsBoxes(results, 0.5f);
 			validResults.insert(std::end(validResults), std::begin(nms), std::end(nms));
 		}
-
-		for (const YoloResult& r : validResults)
-		{
-			// std::cout << r << std::endl;
-			// cv::rectangle(imgLocal, cv::Point(r.x, r.y), cv::Point(r.x + r.w, r.y + r.h), cv::Scalar(0, 255, 0));
-			// cv::putText(imgLocal, string_format("%s - %f", r.ClassName().c_str(), r.Conf()), cv::Point(r.x, r.y - 10), cv::FONT_HERSHEY_DUPLEX, 0.5, CV_RGB(255, 50, 50), 1);
-		}
-
-		// cv::imwrite("out.jpg", imgLocal);
 
 		return validResults;
 	}

@@ -34,7 +34,7 @@
 #include <string>
 #include <vector>
 
-DEFINE_EXCEPTION(YoloParserException);
+DEFINE_EXCEPTION(YoloParserException)
 
 enum class YoloType
 {
@@ -96,6 +96,15 @@ public:
 	using Anchors    = std::vector<AnchorType>;
 	struct YoloLayer
 	{
+		YoloLayer() :
+			id(0),
+			anchors(),
+			scale(0.0f),
+			gridW(0),
+			gridH(0)
+		{
+		}
+
 		uint32_t id;
 		Anchors anchors;
 		float scale;
@@ -195,7 +204,7 @@ public:
 		return m_yoloLayers.at(idx);
 	}
 
-	const std::size_t GetNumAnchors() const
+	std::size_t GetNumAnchors() const
 	{
 		if (m_yoloLayers.empty())
 			throw(YoloParserException("[GetNumAnchors]: No YoloLayer found - Parsing the config might have failed"));

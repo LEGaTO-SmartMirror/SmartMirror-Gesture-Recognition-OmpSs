@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#define YLP_UNUSED(x) (void)(x)
+
 #define MAX_ANCHORS 6
 
 namespace Yolo
@@ -22,6 +24,10 @@ namespace nvinfer1
 {
 class YoloLayerPlugin : public IPluginV2IOExt
 {
+	YoloLayerPlugin(YoloLayerPlugin const&) = delete;            /* disable copy constructor */
+	YoloLayerPlugin& operator=(YoloLayerPlugin const&) = delete; /* disable assignment constructor */
+	YoloLayerPlugin(YoloLayerPlugin&&)                 = delete;
+
 public:
 	YoloLayerPlugin(int yolo_width, int yolo_height, int num_anchors, float* anchors, int num_classes, int input_width, int input_height, float scale_x_y);
 	YoloLayerPlugin(const void* data, size_t length);
@@ -41,6 +47,7 @@ public:
 
 	virtual size_t getWorkspaceSize(int maxBatchSize) const override
 	{
+		YLP_UNUSED(maxBatchSize);
 		return 0;
 	}
 
@@ -52,6 +59,8 @@ public:
 
 	bool supportsFormatCombination(int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) const override
 	{
+		YLP_UNUSED(nbInputs);
+		YLP_UNUSED(nbOutputs);
 		return inOut[pos].format == TensorFormat::kLINEAR && inOut[pos].type == DataType::kFLOAT;
 	}
 
@@ -131,6 +140,6 @@ private:
 
 REGISTER_TENSORRT_PLUGIN(YoloPluginCreator);
 
-}; // namespace nvinfer1
+} // namespace nvinfer1
 
 #endif // YOLO_LAYER_PLUGIN_H

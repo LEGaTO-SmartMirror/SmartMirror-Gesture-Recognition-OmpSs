@@ -52,13 +52,41 @@ YoloTRT::YoloResults g_yoloResults[MAX_BUFFERS]; // Buffer for the yolo results
 
 struct Settings
 {
-	Settings()
-	{
-		valid = false;
-	}
+	Settings() :
+		valid(false),
+		dlaCore(-1),
+		useFP16(false),
+		onnxFile(""),
+		configFile(""),
+		engineFile(""),
+		classFile(""),
+		detectStr(""),
+		amountStr(""),
+		fpsStr(""),
+		imgWidth(0),
+		imgHeight(0),
+		imgChannel(0),
+		yoloType(YoloType::NON),
+		yoloThreshold(0.0f)
+	{}
 
 	// This expects that section at least contains all the required items
-	Settings(inipp::Ini<char>::Section& sec)
+	Settings(inipp::Ini<char>::Section& sec) :
+		valid(false),
+		dlaCore(-1),
+		useFP16(false),
+		onnxFile(""),
+		configFile(""),
+		engineFile(""),
+		classFile(""),
+		detectStr(""),
+		amountStr(""),
+		fpsStr(""),
+		imgWidth(0),
+		imgHeight(0),
+		imgChannel(0),
+		yoloType(YoloType::NON),
+		yoloThreshold(0.0f)
 	{
 		inipp::extract(sec["DLA_CORE"], dlaCore);
 		inipp::extract(sec["ONNX_FILE"], onnxFile);

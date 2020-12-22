@@ -5,7 +5,7 @@ function(INIT_OMPSS)
         set(MCC ${OMPSS_HOME}/bin/mcc CACHE INTERNAL "C Mercurium Compiler")
         set(MCXX ${OMPSS_HOME}/bin/mcxx CACHE INTERNAL "C++ Mercurium Compiler")
         set(LIBS_MCXX "" CACHE INTERNAL "List of libraries for linking") # Reset the link library list
-        set(INCS_MCXX "" CACHE INTERNAL "List of include dirs for compiling") # Reset the include directory list
+        set(INCS_MCC  "" CACHE INTERNAL "List of include dirs for compiling") # Reset the include directory list
     else()
         message(FATAL_ERROR "Environment variable OMPSS_HOME not set")
     endif()
@@ -103,14 +103,14 @@ function(ADD_INCLUDE_DIR_OMPSS)
         # A list of length 0 is a single string
         if(${LL} GREATER_EQUAL 1)
             foreach(INC IN LISTS ${ARG})
-                list(APPEND INCS_MCXX "-I${INC}")
+                list(APPEND INCS_MCC "-I${INC}")
             endforeach()
         else()
-            list(APPEND INCS_MCXX "-I${ARG}")
+            list(APPEND INCS_MCC "-I${ARG}")
         endif()
     endforeach()
 
-    set(INCS_MCXX ${INCS_MCXX} CACHE INTERNAL "List of include dirs for compiling")
+    set(INCS_MCC ${INCS_MCC} CACHE INTERNAL "List of include dirs for compiling")
 endfunction(ADD_INCLUDE_DIR_OMPSS)
 
 
@@ -142,9 +142,17 @@ function(ADD_EXECUTABLE_OMPSS)
         set(MCC_DEPENDS cpp_obj)
     endif()
 
+    # Compile C sources using GCC
+    if(DEFINED OMPSS_EXE_C_SRC)
+        add_library(c_obj OBJECT ${OMPSS_EXE_C_SRC})
+        set_target_properties(c_obj PROPERTIES LINKER_LANGUAGE C)
+        list(APPEND ADDITIONAL_OBJS $<TARGET_OBJECTS:c_obj>)
+        set(MCC_DEPENDS c_obj)
+    endif()
+
     # Compile C main using MCC
     ADD_CUSTOM_COMMAND(OUTPUT ${MCC_OUTPUT_OBJ}
-        COMMAND ${MCC} -c --ompss-2 ${OMPSS_EXE_MAIN} -o ${MCC_OUTPUT_OBJ} ${INCS_MCXX}
+        COMMAND ${MCC} -c --ompss-2 ${OMPSS_EXE_MAIN} -o ${MCC_OUTPUT_OBJ} ${INCS_MCC}
         DEPENDS ${MCC_DEPENDS} ${OMPSS_EXE_MAIN}
         COMMENT "Compiling mcc main"
     )
