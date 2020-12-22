@@ -58,7 +58,7 @@ struct Settings
 	}
 
 	// This expects that section at least contains all the required items
-	Settings(inipp::Ini<char>::Section sec)
+	Settings(inipp::Ini<char>::Section& sec)
 	{
 		inipp::extract(sec["DLA_CORE"], dlaCore);
 		inipp::extract(sec["ONNX_FILE"], onnxFile);
@@ -303,10 +303,10 @@ extern "C"
 							  g_settings.classFile, g_settings.dlaCore, g_settings.useFP16,
 							  true, g_settings.yoloThreshold, g_settings.yoloType);
 
-		g_pSortTrackers = new SORT[YoloTRT::GetClassCount()];
+		g_pSortTrackers = new SORT[g_pYolo->GetClassCount()];
 
 		// Initialize SORT tracker for each class
-		for (std::size_t i = 0; i < YoloTRT::GetClassCount(); i++)
+		for (std::size_t i = 0; i < g_pYolo->GetClassCount(); i++)
 			g_pSortTrackers[i] = SORT(5, 3);
 
 		// Set last tracking count to 0
@@ -346,13 +346,13 @@ extern "C"
 		for (const YoloTRT::YoloResult& r : results)
 		{
 			trackingDets.try_emplace(r.ClassID(), TrackingObjects());
-			trackingDets[r.ClassID()].push_back({ { r.x, r.y, r.w, r.h }, static_cast<uint32_t>(std::round(r.Conf() * 100)), r.ClassName() });
+			trackingDets[r.ClassID()].push_back({ { r.x, r.y, r.w, r.h }, static_cast<uint32_t>(std::round(r.Conf() * 100)), g_pYolo->ClassName(r.ClassID()) });
 		}
 
 		TrackingObjects trackers;
 		TrackingObjects dets;
 
-		for (std::size_t i = 0; i < YoloTRT::GetClassCount(); i++)
+		for (std::size_t i = 0; i < g_pYolo->GetClassCount(); i++)
 		{
 			if (trackingDets.count(i))
 				dets = trackingDets[i];

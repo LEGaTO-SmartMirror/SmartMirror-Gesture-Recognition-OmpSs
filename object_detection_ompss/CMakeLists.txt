@@ -40,6 +40,3 @@ set(MCC_OUTPUT_BIN "YoloTRT.bin")
 
 ADD_EXECUTABLE_OMPSS(TARGET_NAME YoloTRT MAIN ${c_src} OUTPUT_NAME ${MCC_OUTPUT_BIN} CXX_SRC ${cpp_src})
 COPY_BINARY_TO_HOST(YoloTRT "smartmirror5-2" "jasmin" ${CMAKE_RUNTIME_OUTPUT_DIRECTORY} ${MCC_OUTPUT_BIN})
-
-## TODO: Fix the deprecated calls
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")

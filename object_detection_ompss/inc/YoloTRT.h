@@ -84,7 +84,7 @@ public:
 			return boxConfidence * classProb;
 		}
 
-		void Scale(const uint32_t &width, const uint32_t &height)
+		void Scale(const uint32_t& width, const uint32_t& height)
 		{
 			x *= width;
 			y *= height;
@@ -92,23 +92,14 @@ public:
 			h *= height;
 		}
 
-		std::string ClassName() const
-		{
-			int32_t id = static_cast<int32_t>(classID);
-			if (YoloTRT::GetClassCount() < id)
-				return string_format("INVALID_CLASSID: %s", id);
-			return YoloTRT::Classes().at(id);
-		}
-
 		uint32_t ClassID() const
 		{
 			return static_cast<uint32_t>(classID);
 		}
 
-		friend std::ostream &operator<<(std::ostream &os, const YoloResult &dt)
+		friend std::ostream& operator<<(std::ostream& os, const YoloResult& dt)
 		{
 			os << string_format("x=%f - y=%f - w=%f - h=%f - boxC=%f - cID=%d - cProb=%f", dt.x, dt.y, dt.w, dt.h, dt.boxConfidence, static_cast<int32_t>(dt.classID), dt.classProb);
-			// os << string_format("{\"TrackID\": %i, \"name\": \"%s\", \"center\": [%.5f,%.5f], \"w_h\": [%.5f,%.5f]}", 0, dt.ClassName().c_str(), dt.x, dt.y, dt.w, dt.h);
 			return os;
 		}
 	};
@@ -116,9 +107,9 @@ public:
 	using YoloResults = std::vector<YoloResult>;
 
 public:
-	YoloTRT(const std::string &onnxFile, const std::string &configFile, const std::string &engineFile,
-			const std::string &classFile, const int32_t &dlaCore = 0, const bool &useFP16 = false,
-			const bool &autoLoad = false, const float &threshold = 0.3f, const YoloType yoloType = YoloType::NON) :
+	YoloTRT(const std::string& onnxFile, const std::string& configFile, const std::string& engineFile,
+			const std::string& classFile, const int32_t& dlaCore = 0, const bool& useFP16 = false,
+			const bool& autoLoad = false, const float& threshold = 0.3f, const YoloType yoloType = YoloType::NON) :
 		m_onnxFile(onnxFile),
 		m_engineFile(engineFile),
 		m_dlaCore(dlaCore),
@@ -130,7 +121,8 @@ public:
 		m_verbose(false),
 		m_imgSize(0, 0),
 		m_yoloParser(configFile, yoloType),
-		m_threshold(threshold)
+		m_threshold(threshold),
+		m_classes()
 	{
 		parseClassFile(classFile);
 		if (autoLoad)
@@ -142,17 +134,17 @@ public:
 		buildOrLoadEngine(FORCE_REBUILD);
 	}
 
-	void SetVerbose(const bool &en = true)
+	void SetVerbose(const bool& en = true)
 	{
 		m_verbose = en;
 	}
 
-	void SetThreshold(const float &threshold)
+	void SetThreshold(const float& threshold)
 	{
 		m_threshold = threshold;
 	}
 
-	YoloResults Infer(const cv::Mat &img)
+	YoloResults Infer(const cv::Mat& img)
 	{
 		m_imgSize = img.size();
 
@@ -182,30 +174,37 @@ public:
 		return results;
 	}
 
-	static std::size_t GetClassCount()
+	std::size_t GetClassCount() const
 	{
-		return s_classes.size();
+		return m_classes.size();
 	}
 
-	static const std::vector<std::string> Classes()
+	const std::vector<std::string>& Classes() const
 	{
-		return s_classes;
+		return m_classes;
+	}
+
+	std::string ClassName(const std::size_t& classID) const
+	{
+		if (m_classes.size() < classID)
+			return string_format("INVALID_CLASSID: %s", classID);
+		return m_classes.at(classID);
 	}
 
 private:
-	void parseClassFile(const std::string &classFile)
+	void parseClassFile(const std::string& classFile)
 	{
-		s_classes.clear();
+		m_classes.clear();
 		std::ifstream f(classFile);
 		if (!f.is_open())
 			throw(YoloTRTException(string_format("Failed to load class file: %s", classFile.c_str())));
 
 		std::string line;
 		while ((std::getline(f, line)))
-			s_classes.push_back(line);
+			m_classes.push_back(line);
 	}
 
-	void buildOrLoadEngine(const bool &forceRebuild = false)
+	void buildOrLoadEngine(const bool& forceRebuild = false)
 	{
 		if (!forceRebuild && fileExists(m_engineFile))
 			loadEngine();
@@ -321,8 +320,8 @@ private:
 
 		std::cout << "Input: " << network->getInput(0)->getName() << std::endl;
 
-		std::vector<nvinfer1::ITensor *> oldTensors;
-		std::vector<nvinfer1::ITensor *> newTensors;
+		std::vector<nvinfer1::ITensor*> oldTensors;
+		std::vector<nvinfer1::ITensor*> newTensors;
 
 		for (int32_t i = 0; i < network->getNbOutputs(); i++)
 			oldTensors.push_back(network->getOutput(i));
@@ -332,7 +331,7 @@ private:
 
 		for (std::size_t i = 0; i < oldTensors.size(); i++)
 		{
-			const YoloParser::YoloLayer &yLayer = m_yoloParser.GetYoloLayer(i);
+			const YoloParser::YoloLayer& yLayer = m_yoloParser.GetYoloLayer(i);
 			std::cout << "Processing Output Layer: " << oldTensors.at(i)->getName() << std::endl;
 
 			std::vector<nvinfer1::PluginField> pluginAttributes;
@@ -349,19 +348,19 @@ private:
 			pluginData.nbFields = pluginAttributes.size();
 			pluginData.fields   = pluginAttributes.data();
 
-			nvinfer1::IPluginV2 *pluginObj = creator->createPlugin("YoloLayer_TRT", &pluginData);
+			nvinfer1::IPluginV2* pluginObj = creator->createPlugin("YoloLayer_TRT", &pluginData);
 
 			newTensors.push_back(network->addPluginV2(&oldTensors.at(i), 1, *pluginObj)->getOutput(0));
 			m_outputLayer[newTensors.back()->getName()] = yLayer.GetGridArea();
 		}
 
 		std::cout << "Marking new Outputs ... " << std::flush;
-		for (nvinfer1::ITensor *newTensor : newTensors)
+		for (nvinfer1::ITensor* newTensor : newTensors)
 			network->markOutput(*newTensor);
 		std::cout << "Done" << std::endl;
 
 		std::cout << "Unmarking old Outputs ... " << std::flush;
-		for (nvinfer1::ITensor *oldTensor : oldTensors)
+		for (nvinfer1::ITensor* oldTensor : oldTensors)
 			network->unmarkOutput(*oldTensor);
 		std::cout << "Done" << std::endl;
 		// ==== Add Yolo Layer ====
@@ -392,13 +391,13 @@ private:
 		if (!pSerializedEngine)
 			throw(YoloTRTException("Failed to serialize Engine"));
 
-		engineFile.write(static_cast<char *>(pSerializedEngine->data()), pSerializedEngine->size());
+		engineFile.write(static_cast<char*>(pSerializedEngine->data()), pSerializedEngine->size());
 		engineFile.close();
 
 		std::cout << "Done" << std::endl;
 	}
 
-	void processInput(const cv::Mat &image, const bool &scale = true) const
+	void processInput(const cv::Mat& image, const bool& scale = true) const
 	{
 		// ==== Pre-Process Image ====
 		std::vector<float> data;
@@ -416,28 +415,28 @@ private:
 
 		std::vector<cv::Mat> channles(3);
 		cv::split(imgConv2, channles);
-		float *ptr1 = (float *)(channles[0].data);
-		float *ptr2 = (float *)(channles[1].data);
-		float *ptr3 = (float *)(channles[2].data);
+		float* ptr1 = reinterpret_cast<float*>(channles[0].data);
+		float* ptr2 = reinterpret_cast<float*>(channles[1].data);
+		float* ptr3 = reinterpret_cast<float*>(channles[2].data);
 		data.insert(data.end(), ptr1, ptr1 + m_yoloParser.GetWidth() * m_yoloParser.GetHeight());
 		data.insert(data.end(), ptr2, ptr2 + m_yoloParser.GetWidth() * m_yoloParser.GetHeight());
 		data.insert(data.end(), ptr3, ptr3 + m_yoloParser.GetWidth() * m_yoloParser.GetHeight());
 
 		// ==== Pre-Process Image ====
 
-		float *hostInputBuffer = static_cast<float *>(m_buffers->getHostBuffer(INPUT_LAYER));
+		float* hostInputBuffer = static_cast<float*>(m_buffers->getHostBuffer(INPUT_LAYER));
 		std::memcpy(hostInputBuffer, data.data(), data.size() * sizeof(float));
 	}
 
-	YoloResults nmsBoxes(YoloResults detections, const float &nmsThreshold) const
+	YoloResults nmsBoxes(YoloResults detections, const float& nmsThreshold) const
 	{
-		std::sort(std::begin(detections), std::end(detections), [](const YoloResult &a, const YoloResult &b) { return a.Conf() > b.Conf(); });
+		std::sort(std::begin(detections), std::end(detections), [](const YoloResult& a, const YoloResult& b) { return a.Conf() > b.Conf(); });
 		YoloResults out;
 
-		for (YoloResult &r : detections)
+		for (YoloResult& r : detections)
 		{
 			bool keep = true;
-			for (const YoloResult &o : out)
+			for (const YoloResult& o : out)
 			{
 				if (keep)
 				{
@@ -479,32 +478,32 @@ private:
 		return out;
 	}
 
-	YoloResults processOutput(const cv::Mat &img)
+	YoloResults processOutput(const cv::Mat& img)
 	{
 		std::map<int32_t, YoloResults> results;
 		YoloResults validResults;
 		// cv::Mat imgLocal = img.clone();
 
-		for (const auto &[outLayer, gridSize] : m_outputLayer)
+		for (const auto& [outLayer, gridSize] : m_outputLayer)
 		{
-			const YoloResult *pResults = static_cast<const YoloResult *>(m_buffers->getHostBuffer(outLayer));
+			const YoloResult* pResults = static_cast<const YoloResult*>(m_buffers->getHostBuffer(outLayer));
 
 			// Print output values for each index
 			for (int i = 0; i < gridSize * 3; i++)
 			{
-				const YoloResult &res = pResults[i];
+				const YoloResult& res = pResults[i];
 				if (res.boxConfidence * res.classProb > m_threshold)
 					results[static_cast<int32_t>(res.classID)].push_back(res);
 			}
 		}
 
-		for (auto &[classID, results] : results)
+		for (auto& [classID, results] : results)
 		{
 			YoloResults nms = nmsBoxes(results, 0.5f);
 			validResults.insert(std::end(validResults), std::begin(nms), std::end(nms));
 		}
 
-		for (const YoloResult &r : validResults)
+		for (const YoloResult& r : validResults)
 		{
 			// std::cout << r << std::endl;
 			// cv::rectangle(imgLocal, cv::Point(r.x, r.y), cv::Point(r.x + r.w, r.y + r.h), cv::Scalar(0, 255, 0));
@@ -516,7 +515,7 @@ private:
 		return validResults;
 	}
 
-	static bool fileExists(const std::string &name)
+	static bool fileExists(const std::string& name)
 	{
 		std::ifstream f(name);
 		return f.good();
@@ -538,7 +537,5 @@ private:
 	cv::Size m_imgSize;
 	YoloParser m_yoloParser;
 	float m_threshold;
-	static std::vector<std::string> s_classes;
+	std::vector<std::string> m_classes;
 };
-
-std::vector<std::string> YoloTRT::s_classes = std::vector<std::string>();

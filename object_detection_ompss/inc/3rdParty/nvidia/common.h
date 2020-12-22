@@ -579,11 +579,10 @@ inline void enableDLA(nvinfer1::IBuilder* builder, nvinfer1::IBuilderConfig* con
 		{
 			config->setFlag(nvinfer1::BuilderFlag::kGPU_FALLBACK);
 		}
-		if (!builder->getInt8Mode() && !config->getFlag(nvinfer1::BuilderFlag::kINT8))
+		if (!config->getFlag(nvinfer1::BuilderFlag::kINT8))
 		{
 			// User has not requested INT8 Mode.
 			// By default run in FP16 mode. FP32 mode is not permitted.
-			builder->setFp16Mode(true);
 			config->setFlag(nvinfer1::BuilderFlag::kFP16);
 		}
 		config->setDefaultDeviceType(nvinfer1::DeviceType::kDLA);
