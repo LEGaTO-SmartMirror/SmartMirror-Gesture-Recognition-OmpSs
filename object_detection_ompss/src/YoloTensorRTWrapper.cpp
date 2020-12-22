@@ -202,6 +202,10 @@ void printDetections(const TrackingObjects& trackers)
 	std::cout << str.str() << std::endl;
 }
 
+#ifdef WRITE_IMAGE_2_DISK
+uint32_t init = 0;
+#endif
+
 extern "C"
 {
 	// ======= Config Functions =======
@@ -330,7 +334,7 @@ extern "C"
 		if (!g_frame[buffer % MAX_BUFFERS].empty())
 			g_yoloResults[buffer % MAX_BUFFERS] = g_pYolo->Infer(g_frame[buffer % MAX_BUFFERS]);
 	}
-	int32_t init = 0;
+
 	void ProcessDetections(const uint8_t buffer)
 	{
 		bool changed                        = false;
@@ -376,6 +380,7 @@ extern "C"
 		if (changed)
 			printDetections(trackers);
 
+#ifdef WRITE_IMAGE_2_DISK
 		if (init > 2)
 		{
 			for (const TrackingObject& obj : trackers)
@@ -390,6 +395,7 @@ extern "C"
 			imwrite("out.jpg", frame);
 		}
 		init++;
+#endif // WRITE_IMAGE_2_DISK
 	}
 
 	// ======= Utility Functions =======
