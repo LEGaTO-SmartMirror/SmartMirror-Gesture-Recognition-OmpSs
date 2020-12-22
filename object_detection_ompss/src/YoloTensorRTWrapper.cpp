@@ -14,32 +14,41 @@
 #include <iostream>
 #include <thread>
 
-// TODO: Sort and order all the global variables
-// Also add comments
-
 const float DEFAULT_YOLO_THRESHOLD = 0.35f; // Threshold used in case non is specified in the config
+const double ONE_SECOND = 1000.0; // One second in milliseconds
+const uint32_t MAX_BUFFERS = 2; // Number of buffers
 
-const uint32_t WIDTH  = 416;
-const uint32_t HEIGHT = 416;
+// List of config values required for the application to execute properly
+std::vector<std::string> REQUIRED_CONFIG_VALUES = {
+	"DLA_CORE",
+	"ONNX_FILE",
+	"CONFIG_FILE",
+	"ENGINE_FILE",
+	"CLASS_FILE",
+	"DETECT_STR",
+	"AMOUNT_STR",
+	"FPS_STR",
+	"IMAGE_WIDTH",
+	"IMAGE_HEIGHT",
+	"IMAGE_CHANNEL"
+};
 
-const double ONE_SECOND = 1000.0;
 
-YoloTRT* g_pYolo;
-cv::VideoCapture g_cap;
+inipp::Ini<char> g_ini; // Ini parser for the config fie
 
-double g_elapsedTime;
-Timer g_timer;
+cv::VideoCapture g_cap; // Video capture object used to read the input image from the image handler
 
-TrackingObjects g_lastTrackings;
+Timer g_timer; // Timer used to measure the time required for one iteration
+double g_elapsedTime; // Sum of the elapsed time, used to check if one second has passed
 
-SORT* g_pSortTrackers;
+TrackingObjects g_lastTrackings; // Vector containing the last tracked objects
+SORT* g_pSortTrackers; // Pointer to n-sort trackers (n = number of classes)
 
-#define MAX_BUFFERS 2
+cv::Mat g_frame[MAX_BUFFERS]; // Buffer for the input frame
 
-cv::Mat g_frame[MAX_BUFFERS];
-YoloTRT::YoloResults g_yoloResults[MAX_BUFFERS];
+YoloTRT* g_pYolo; // Pointer to a TensorRT Yolo object used to process the input image
+YoloTRT::YoloResults g_yoloResults[MAX_BUFFERS]; // Buffer for the yolo results 
 
-inipp::Ini<char> g_ini;
 
 struct Settings
 {
@@ -139,7 +148,7 @@ struct Settings
 	float yoloThreshold;
 };
 
-Settings g_settings;
+Settings g_settings; // Settings container, containing all settings read from the provided config file
 
 bool checkConfigItemPresent(const std::string& item, const std::string& section = "")
 {
@@ -150,6 +159,18 @@ bool checkConfigItemPresent(const std::string& item, const std::string& section 
 	}
 
 	return true;
+}
+
+bool checkConfigItemsPresent(const std::vector<std::string>& items, const std::string& section = "")
+{
+	bool valid = true;
+	for(const std::string& item : items)
+	{
+		if(!checkConfigItemPresent(item, section))
+			valid = false;
+	}
+
+	return valid;
 }
 
 BBox toCenter(const BBox& bBox)
@@ -198,17 +219,7 @@ extern "C"
 		is.close();
 		inipp::Ini<char>::Section sec = g_ini.sections[""];
 
-		if (!checkConfigItemPresent("DLA_CORE")) return false;
-		if (!checkConfigItemPresent("ONNX_FILE")) return false;
-		if (!checkConfigItemPresent("CONFIG_FILE")) return false;
-		if (!checkConfigItemPresent("ENGINE_FILE")) return false;
-		if (!checkConfigItemPresent("CLASS_FILE")) return false;
-		if (!checkConfigItemPresent("DETECT_STR")) return false;
-		if (!checkConfigItemPresent("AMOUNT_STR")) return false;
-		if (!checkConfigItemPresent("FPS_STR")) return false;
-		if (!checkConfigItemPresent("IMAGE_WIDTH")) return false;
-		if (!checkConfigItemPresent("IMAGE_HEIGHT")) return false;
-		if (!checkConfigItemPresent("IMAGE_CHANNEL")) return false;
+		if(!checkConfigItemsPresent(REQUIRED_CONFIG_VALUES)) return false;
 
 		g_settings = Settings(sec);
 
@@ -383,7 +394,7 @@ extern "C"
 
 	// ======= Utility Functions =======
 
-	void c2CvMat(uint8_t* pData, const int32_t height, const int32_t width, const uint8_t buffer)
+	void C2CvMat(uint8_t* pData, const int32_t height, const int32_t width, const uint8_t buffer)
 	{
 		if (pData == nullptr) return;
 
@@ -426,6 +437,13 @@ extern "C"
 									   g_settings.fpsStr.c_str(), fps, iteration, maxFPS, itrTime)
 					  << std::endl;
 		}
+	}
+
+	void PrintStartString()
+	{
+		std::cout << "{\"STATUS\": \"looping starts now\"}" << std::endl;
+		if (g_settings.valid)
+			std::cout << string_format("{\"%s\": []}", g_settings.detectStr.c_str()) << std::endl;
 	}
 
 	void Cleanup()

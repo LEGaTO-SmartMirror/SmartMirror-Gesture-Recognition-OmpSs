@@ -12,58 +12,56 @@
 
 #include <YoloTensorRTWrapper.h>
 
-#define ITERATION_CAP 2000000000
+const uint64_t ITERATION_CAP = 2000000000;
 
-#define IMAGE_WIDTH  416
-#define IMAGE_HEIGHT 416
-#define CHANNELS     3
-
-#define CONFIG_FILE "config.ini"
-
-#define _assert(cond)                                                  \
-	{                                                                  \
-		if (!cond)                                                     \
-		{                                                              \
-			fprintf(stderr, "[%s][%s]:[%u] Assertion '%s' failed. \n", \
-					__func__, __FILE__, __LINE__, #cond);              \
-			abort();                                                   \
-		}                                                              \
-	}
-
-static inline void *_lmalloc(size_t size, const char *objName)
+static inline void* lmalloc(const size_t size)
 {
 #ifdef SERIAL
-	void *ret = malloc(size);
+	void* ret = malloc(size);
 #else
-	void *ret = nanos6_lmalloc(size);
+	void* ret = nanos6_lmalloc(size);
 #endif
 	if (!ret)
 	{
 		perror("nanos6_lmalloc()");
 		exit(1);
 	}
-#ifdef D
-	printf("%s lmalloced with size %ld  Addr %p - %p \n", objName, size /**10e-3*/, (void *)objName, (void *)objName + size);
-#endif
 
 	return ret;
 }
 
-static inline void _lfree(void *ptr, size_t size)
+static inline void lfree(void* ptr, const size_t size)
 {
-	_assert(ptr);
-	nanos6_lfree(ptr, size);
+	if(ptr)
+	{
+#ifdef SERIAL
+		free(ptr);
+#else
+		nanos6_lfree(ptr, size);
+#endif
+	}
 }
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
 	float maxFPS = 30.0f;
 	char capStr[BUFSIZ];
-	int32_t imageSize; // = IMAGE_HEIGHT * IMAGE_WIDTH * CHANNELS;
-	uint8_t *pData0;
-	uint8_t *pData1;
+	int32_t imageSize;
+	uint8_t* pData0;
+	uint8_t* pData1;
 	uint32_t frameCnt;
 	uint64_t iteration;
+	int32_t imgWidth;
+	int32_t imgHeight;
+	size_t cfgNameLen;
+	char* pConfigFile;
+
+	if (argc < 2)
+	{
+		fprintf(stderr, "Usage: %s CONFIG-FILE\n", argv[0]);
+		fflush(stderr);
+		return -1;
+	}
 
 	fd_set readfds;
 	FD_ZERO(&readfds);
@@ -73,7 +71,11 @@ int main(int argc, char **argv)
 	timeout.tv_usec = 0;
 	char message[BUFSIZ];
 
-	if (ParseConfig(CONFIG_FILE) != 1)
+	cfgNameLen  = strlen(argv[1]) + 1;
+	pConfigFile = lmalloc(cfgNameLen * sizeof(char));
+	strcpy(pConfigFile, argv[1]);
+
+	if (ParseConfig(pConfigFile) != 1)
 	{
 		fprintf(stderr, "Unable to parse provided config or config does not contain all required values\n");
 		return -1;
@@ -81,21 +83,24 @@ int main(int argc, char **argv)
 
 	PrintSettings();
 
-	imageSize = GetImageWidth() * GetImageHeight() * GetImageChannel();
+	imgWidth = GetImageWidth();
+	imgHeight = GetImageHeight();
 
-	pData0 = (uint8_t *)_lmalloc(imageSize * sizeof(uint8_t), "data_struct_0");
-	pData1 = (uint8_t *)_lmalloc(imageSize * sizeof(uint8_t), "data_struct_1");
+	imageSize = imgWidth * imgHeight * GetImageChannel();
 
-	// Set last frame count to 0
+	pData0 = (uint8_t* )lmalloc(imageSize * sizeof(uint8_t));
+	pData1 = (uint8_t* )lmalloc(imageSize * sizeof(uint8_t));
+
+	/* Set last frame count to 0 */
 	frameCnt = 0;
 
-	// Wait for image handler to boot up
+	/* Wait for image handler to boot up */
 	sleep(5);
 
 	sprintf(capStr, "shmsrc socket-path=/dev/shm/camera_small ! video/x-raw, format=BGR, width=%i, height=%i, \
 		framerate=30/1 ! queue max-size-buffers=5 leaky=2 ! videoconvert ! video/x-raw, format=BGR ! \
 		appsink drop=true",
-			IMAGE_WIDTH, IMAGE_HEIGHT);
+			imgWidth, imgHeight);
 
 	if (InitVideoStream(capStr) != 1)
 	{
@@ -103,10 +108,10 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-#pragma oss task node(1) label("init_node_1")
+#pragma oss task in(pConfigFile[0; cfgNameLen])node(1) label("init_node_1")
 	{
 		printf("{\"STATUS\": \"initilize everything on node 1\"}\n");
-		if (InitYoloTensorRT(CONFIG_FILE) != 1)
+		if (InitYoloTensorRT(pConfigFile) != 1)
 		{
 			fprintf(stderr, "Failed to init Yolo, exiting ...\n");
 			exit(-1);
@@ -143,9 +148,9 @@ int main(int argc, char **argv)
 		{
 			GetNextFrame(pData0);
 
-#pragma oss task in(pData0[0; imageSize])node(1) label("even_copy")
+#pragma oss task in(pData0[0; imageSize], imgWidth, imgHeight)node(1) label("even_copy")
 			{
-				c2CvMat(pData0, IMAGE_HEIGHT, IMAGE_WIDTH, 1);
+				C2CvMat(pData0, imgHeight, imgWidth, 1);
 			} /* end task */
 
 #pragma oss task node(1) label("process_frame_0")
@@ -161,9 +166,9 @@ int main(int argc, char **argv)
 		{
 			GetNextFrame(pData1);
 
-#pragma oss task in(pData1[0; imageSize])node(1) label("odd_copy")
+#pragma oss task in(pData1[0; imageSize], imgWidth, imgHeight)node(1) label("odd_copy")
 			{
-				c2CvMat(pData1, IMAGE_HEIGHT, IMAGE_WIDTH, 0);
+				C2CvMat(pData1, imgHeight, imgWidth, 0);
 			} /* end task */
 
 #pragma oss task node(1) label("process_frame_1")
@@ -188,8 +193,9 @@ int main(int argc, char **argv)
 
 	Cleanup();
 
-	_lfree(pData0, imageSize * sizeof(uint8_t));
-	_lfree(pData1, imageSize * sizeof(uint8_t));
+	lfree(pData0, imageSize * sizeof(uint8_t));
+	lfree(pData1, imageSize * sizeof(uint8_t));
+	lfree(pConfigFile, cfgNameLen * sizeof(char));
 
 	return 0;
 }

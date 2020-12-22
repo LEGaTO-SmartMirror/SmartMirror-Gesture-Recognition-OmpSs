@@ -12,4 +12,4 @@ cd /opt/dev/MagicMirror/modules/SmartMirror-Gesture-Recognition-OmpSs/object_det
 
 #source	env.sh
 
-mpirun.mpich -np 2 -f hostfile ./YoloTRT.bin
+mpirun.mpich -np 2 -f hostfile ./YoloTRT.bin config.ini
