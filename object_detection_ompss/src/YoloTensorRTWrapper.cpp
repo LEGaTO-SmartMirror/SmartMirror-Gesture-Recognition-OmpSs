@@ -1,3 +1,29 @@
+/* 
+ *  File: YoloTensorRTWWrapper.cpp
+ *  Copyright (c) 2020 Florian Porrmann
+ *  
+ *  MIT License
+ *  
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
+ *  
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
+ *  
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ *  
+ */
+
 /* Threshold used when comparing two bounding boxes
    needs to be defined before YoloTensorRTWrapper.h
  */
@@ -14,12 +40,12 @@
 #include <iostream>
 #include <thread>
 
-const float DEFAULT_YOLO_THRESHOLD = 0.35f; // Threshold used in case non is specified in the config
-const double ONE_SECOND = 1000.0; // One second in milliseconds
-const uint32_t MAX_BUFFERS = 2; // Number of buffers
+const float DEFAULT_YOLO_THRESHOLD = 0.35f;  // Threshold used in case non is specified in the config
+const double ONE_SECOND            = 1000.0; // One second in milliseconds
+const uint32_t MAX_BUFFERS         = 2;      // Number of buffers
 
 // List of config values required for the application to execute properly
-std::vector<std::string> REQUIRED_CONFIG_VALUES = {
+const std::vector<std::string> REQUIRED_CONFIG_VALUES = {
 	"DLA_CORE",
 	"ONNX_FILE",
 	"CONFIG_FILE",
@@ -32,23 +58,6 @@ std::vector<std::string> REQUIRED_CONFIG_VALUES = {
 	"IMAGE_HEIGHT",
 	"IMAGE_CHANNEL"
 };
-
-
-inipp::Ini<char> g_ini; // Ini parser for the config fie
-
-cv::VideoCapture g_cap; // Video capture object used to read the input image from the image handler
-
-Timer g_timer; // Timer used to measure the time required for one iteration
-double g_elapsedTime; // Sum of the elapsed time, used to check if one second has passed
-
-TrackingObjects g_lastTrackings; // Vector containing the last tracked objects
-SORT* g_pSortTrackers; // Pointer to n-sort trackers (n = number of classes)
-
-cv::Mat g_frame[MAX_BUFFERS]; // Buffer for the input frame
-
-YoloTRT* g_pYolo; // Pointer to a TensorRT Yolo object used to process the input image
-YoloTRT::YoloResults g_yoloResults[MAX_BUFFERS]; // Buffer for the yolo results 
-
 
 struct Settings
 {
@@ -68,7 +77,8 @@ struct Settings
 		imgChannel(0),
 		yoloType(YoloType::NON),
 		yoloThreshold(0.0f)
-	{}
+	{
+	}
 
 	// This expects that section at least contains all the required items
 	Settings(inipp::Ini<char>::Section& sec) :
@@ -124,7 +134,7 @@ struct Settings
 		{
 			std::string tiny;
 			inipp::extract(sec["YOLO_TINY"], tiny);
-			if (tiny == "true" || tiny == "TRUE")
+			if (String2Lower(tiny) == "true")
 				yoloType |= YoloType::TINY;
 		}
 
@@ -176,11 +186,27 @@ struct Settings
 	float yoloThreshold;
 };
 
+//  ========= Video Node =========
+cv::VideoCapture g_cap; // Video capture object used to read the input image from the image handler
+
+Timer g_timer;        // Timer used to measure the time required for one iteration
+double g_elapsedTime; // Sum of the elapsed time, used to check if one second has passed
+
+//  ========= Yolo Node =========
+TrackingObjects g_lastTrackings; // Vector containing the last tracked objects
+SORT* g_pSortTrackers;           // Pointer to n-sort trackers (n = number of classes)
+
+cv::Mat g_frame[MAX_BUFFERS]; // Buffer for the input frame
+
+YoloTRT* g_pYolo;                                // Pointer to a TensorRT Yolo object used to process the input image
+YoloTRT::YoloResults g_yoloResults[MAX_BUFFERS]; // Buffer for the yolo results
+
+//  ========= Both Nodes =========
 Settings g_settings; // Settings container, containing all settings read from the provided config file
 
-bool checkConfigItemPresent(const std::string& item, const std::string& section = "")
+bool checkConfigItemPresent(const inipp::Ini<char>::Section& section, const std::string& item)
 {
-	if (g_ini.sections[section].count(item) == 0)
+	if (section.count(item) == 0)
 	{
 		std::cerr << "Item \"" << item << "\" not present in provided configuration" << std::endl;
 		return false;
@@ -189,12 +215,12 @@ bool checkConfigItemPresent(const std::string& item, const std::string& section 
 	return true;
 }
 
-bool checkConfigItemsPresent(const std::vector<std::string>& items, const std::string& section = "")
+bool checkConfigItemsPresent(const inipp::Ini<char>::Section& section, const std::vector<std::string>& items)
 {
 	bool valid = true;
-	for(const std::string& item : items)
+	for (const std::string& item : items)
 	{
-		if(!checkConfigItemPresent(item, section))
+		if (!checkConfigItemPresent(section, item))
 			valid = false;
 	}
 
@@ -247,11 +273,12 @@ extern "C"
 			return false;
 		}
 
-		g_ini.parse(is);
+		inipp::Ini<char> ini;
+		ini.parse(is);
 		is.close();
-		inipp::Ini<char>::Section sec = g_ini.sections[""];
+		inipp::Ini<char>::Section sec = ini.sections[""];
 
-		if(!checkConfigItemsPresent(REQUIRED_CONFIG_VALUES)) return false;
+		if (!checkConfigItemsPresent(sec, REQUIRED_CONFIG_VALUES)) return false;
 
 		g_settings = Settings(sec);
 
@@ -301,27 +328,27 @@ extern "C"
 
 	// ======= Init Functions =======
 
-	int InitVideoStream(const char* pStr)
+	bool InitVideoStream(const char* pStr)
 	{
 		g_cap.open(pStr);
 		if (!g_cap.isOpened())
 		{
 			std::cerr << "[InitVideoStream] Unable to open video stream: " << pStr << std::endl;
-			return 0;
+			return false;
 		}
 
 		g_elapsedTime = 0;
 		g_timer.Start();
 
-		return 1;
+		return true;
 	}
 
-	int InitYoloTensorRT(const char* pConfigFile)
+	bool InitYoloTensorRT(const char* pConfigFile)
 	{
 		if (!ParseConfig(pConfigFile))
 		{
 			std::cerr << "[InitYoloTensorRT] Unable to parse provided config or config does not contain all required values" << std::endl;
-			return 0;
+			return false;
 		}
 
 		// Set TensorRT log level
@@ -340,7 +367,7 @@ extern "C"
 		// Set last tracking count to 0
 		g_lastTrackings.clear();
 
-		return 1;
+		return true;
 	}
 
 	// ======= Processing Functions =======

@@ -1,6 +1,29 @@
-#include <assert.h>
-#include <inttypes.h>
-#include <stdarg.h>
+/* 
+ *  File: main.c
+ *  Copyright (c) 2020 Florian Porrmann
+ *  
+ *  MIT License
+ *  
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
+ *  
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
+ *  
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ *  
+ */
+
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,7 +31,6 @@
 #include <unistd.h>
 
 #include <nanos6/cluster.h>
-#include <nanos6/debug.h>
 
 #include <YoloTensorRTWrapper.h>
 
@@ -23,7 +45,7 @@ static inline void* lmalloc(const size_t size)
 #endif
 	if (!ret)
 	{
-		perror("nanos6_lmalloc()");
+		perror("lmalloc()");
 		exit(1);
 	}
 
@@ -32,7 +54,7 @@ static inline void* lmalloc(const size_t size)
 
 static inline void lfree(void* ptr, const size_t size)
 {
-	if(ptr)
+	if (ptr)
 	{
 #ifdef SERIAL
 		free(ptr);
@@ -75,7 +97,7 @@ int main(int argc, char** argv)
 	pConfigFile = lmalloc(cfgNameLen * sizeof(char));
 	strcpy(pConfigFile, argv[1]);
 
-	if (ParseConfig(pConfigFile) != 1)
+	if (!ParseConfig(pConfigFile))
 	{
 		fprintf(stderr, "Unable to parse provided config or config does not contain all required values\n");
 		return -1;
@@ -83,13 +105,13 @@ int main(int argc, char** argv)
 
 	PrintSettings();
 
-	imgWidth = GetImageWidth();
+	imgWidth  = GetImageWidth();
 	imgHeight = GetImageHeight();
 
 	imageSize = imgWidth * imgHeight * GetImageChannel();
 
-	pData0 = (uint8_t* )lmalloc(imageSize * sizeof(uint8_t));
-	pData1 = (uint8_t* )lmalloc(imageSize * sizeof(uint8_t));
+	pData0 = (uint8_t*)lmalloc(imageSize * sizeof(uint8_t));
+	pData1 = (uint8_t*)lmalloc(imageSize * sizeof(uint8_t));
 
 	/* Set last frame count to 0 */
 	frameCnt = 0;
@@ -102,7 +124,7 @@ int main(int argc, char** argv)
 		appsink drop=true",
 			imgWidth, imgHeight);
 
-	if (InitVideoStream(capStr) != 1)
+	if (!InitVideoStream(capStr))
 	{
 		fprintf(stderr, "Failed to open video sink, exiting ...\n");
 		return -1;
@@ -111,17 +133,16 @@ int main(int argc, char** argv)
 #pragma oss task in(pConfigFile[0; cfgNameLen])node(1) label("init_node_1")
 	{
 		printf("{\"STATUS\": \"initilize everything on node 1\"}\n");
-		if (InitYoloTensorRT(pConfigFile) != 1)
+		if (!InitYoloTensorRT(pConfigFile))
 		{
 			fprintf(stderr, "Failed to init Yolo, exiting ...\n");
-			exit(-1);
+			exit(-1); /* exit() is used here because return is not possible from within an OmpSs task */
 		}
 	}
 
 #pragma oss taskwait
 
-	printf("{\"STATUS\": \"looping starts now\"}\n");
-	printf("{\"DETECTED_GESTURES\": []}\n");
+	PrintStartString();
 
 	sleep(1);
 

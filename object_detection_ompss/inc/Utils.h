@@ -36,7 +36,6 @@
 #include <memory>
 #include <sstream>
 #include <string>
-#include <tuple>
 #include <vector>
 
 #define CLASS_TAG(_C_) "[" << _C_ << "::" << __func__ << "] "
@@ -82,6 +81,10 @@ void printVector(const std::vector<T>& vec)
 	std::cout << std::endl;
 }
 
+// //////////////////////////////////////
+// ======== Container Operations ========
+// //////////////////////////////////////
+
 template<typename T, class InputIt, class InputIt2, class OutputIt, class UnaryPredicate>
 OutputIt copy_from_second_if(InputIt first, InputIt last, InputIt2 first2,
 							 OutputIt d_first, UnaryPredicate pred)
@@ -94,6 +97,45 @@ OutputIt copy_from_second_if(InputIt first, InputIt last, InputIt2 first2,
 		first2++;
 	}
 	return d_first;
+}
+
+//
+// From: https://stackoverflow.com/a/7008476
+//
+template<typename Map, typename F>
+void map_erase_if(Map& m, F pred)
+{
+	typename Map::iterator i = m.begin();
+	while ((i = std::find_if(i, m.end(), pred)) != m.end())
+		m.erase(i++);
+}
+
+// //////////////////////////////////////
+// ======== Container Operations ========
+// //////////////////////////////////////
+
+// //////////////////////////////////////
+// ========= String Operations ==========
+// //////////////////////////////////////
+
+//
+// From: https://stackoverflow.com/a/26221725
+//
+
+template<typename... Args>
+std::string string_format(const std::string& format, Args... args)
+{
+	std::size_t size = snprintf(nullptr, 0, format.c_str(), args...) + 1; // Extra space for '\0'
+	if (size == 0) { throw std::runtime_error("Error during formatting."); }
+	std::unique_ptr<char[]> buf(new char[size]);
+	snprintf(buf.get(), size, format.c_str(), args...);
+	return std::string(buf.get(), buf.get() + size - 1); // We don't want the '\0' inside
+}
+
+static inline std::string String2Lower(std::string str)
+{
+	std::transform(str.begin(), str.end(), str.begin(), [](const unsigned char& c) { return std::tolower(c); });
+	return str;
 }
 
 static inline std::vector<std::string> splitString(const std::string& s, const char& delimiter = ' ')
@@ -120,6 +162,30 @@ static inline std::vector<T> splitStringT(const std::string& s, const char& deli
 
 	return split;
 }
+
+template<typename T>
+static inline std::string ToStringWithPrecision(const T val, const uint32_t& n = 6)
+{
+	std::ostringstream out;
+	out.precision(n);
+	out << std::fixed << val;
+	return out.str();
+}
+
+static std::string CharToHexString(const uint8_t& c)
+{
+	std::ostringstream out;
+	out << std::hex << std::setw(2) << std::setfill('0') << c;
+	return out.str();
+}
+
+// //////////////////////////////////////
+// ========= String Operations ==========
+// //////////////////////////////////////
+
+// //////////////////////////////////////
+// ========== Loop Operations ===========
+// //////////////////////////////////////
 
 //
 // From: https://gist.github.com/arvidsson/7231973
@@ -231,56 +297,13 @@ constexpr auto enumerate(T&& begin, T&& end)
 	return iterable_wrapper{ std::forward<T>(begin), std::forward<T>(end) };
 }
 
-//
-// From: https://stackoverflow.com/a/26221725
-//
+// //////////////////////////////////////
+// ========== Loop Operations ===========
+// //////////////////////////////////////
 
-template<typename... Args>
-std::string string_format(const std::string& format, Args... args)
-{
-	std::size_t size = snprintf(nullptr, 0, format.c_str(), args...) + 1; // Extra space for '\0'
-	if (size == 0) { throw std::runtime_error("Error during formatting."); }
-	std::unique_ptr<char[]> buf(new char[size]);
-	snprintf(buf.get(), size, format.c_str(), args...);
-	return std::string(buf.get(), buf.get() + size - 1); // We don't want the '\0' inside
-}
-
-template<typename A, typename B>
-uint32_t partition(std::vector<std::pair<A, B>>& values, const uint32_t& left, const uint32_t& right)
-{
-	uint32_t pivotIndex = left + (right - left) / 2;
-	uint32_t pivotValue = values[pivotIndex].second;
-	uint32_t i = left, j = right;
-	std::pair<A, B> temp;
-
-	while (i <= j)
-	{
-		while (values[i].second < pivotValue) i++;
-		while (values[j].second > pivotValue) j--;
-
-		if (i <= j)
-		{
-			temp      = values[i];
-			values[i] = values[j];
-			values[j] = temp;
-			i++;
-			j--;
-		}
-	}
-
-	return i;
-}
-
-template<typename A, typename B>
-void quicksort(std::vector<std::pair<A, B>>& values, const uint32_t& left, const uint32_t& right)
-{
-	if (left < right)
-	{
-		uint32_t pivotIndex = partition<A, B>(values, left, right);
-		quicksort(values, left, pivotIndex - 1);
-		quicksort(values, pivotIndex, right);
-	}
-}
+// //////////////////////////////////////
+// ========== Sort Algorithms ===========
+// //////////////////////////////////////
 
 //
 // From: https://stackoverflow.com/a/37369858
@@ -314,37 +337,17 @@ void zipSort(std::vector<A>& data, std::vector<B>& sortBy)
 	std::vector<std::pair<A, B>> zipped;
 	zip(data, sortBy, zipped);
 	std::sort(std::begin(zipped), std::end(zipped), [](const std::pair<A, B>& a, const std::pair<A, B>& b) { return a.second < b.second; });
-	//	quicksort<A, B>(zipped, 0, zipped.size() - 1);
 
 	unzip(zipped, data, sortBy);
 }
 
-//
-// From: https://stackoverflow.com/a/7008476
-//
-template<typename Map, typename F>
-void map_erase_if(Map& m, F pred)
-{
-	typename Map::iterator i = m.begin();
-	while ((i = std::find_if(i, m.end(), pred)) != m.end())
-		m.erase(i++);
-}
+// //////////////////////////////////////
+// ========== Sort Algorithms ===========
+// //////////////////////////////////////
 
-template<typename T>
-static std::string ToStringWithPrecision(const T val, const uint32_t& n = 6)
-{
-	std::ostringstream out;
-	out.precision(n);
-	out << std::fixed << val;
-	return out.str();
-}
-
-static std::string CharToHexString(const uint8_t& c)
-{
-	std::ostringstream out;
-	out << std::hex << std::setw(2) << std::setfill('0') << c;
-	return out.str();
-}
+// //////////////////////////////////////
+// ======== Number 2 Size String ========
+// //////////////////////////////////////
 
 static uint32_t CalcOrder(double val)
 {
@@ -406,7 +409,11 @@ static inline std::string SizeWithSuffix(const int64_t& val)
 }
 
 // //////////////////////////////////////
-// ====== Get Process Memory Usage ======
+// ======== Number 2 Size String ========
+// //////////////////////////////////////
+
+// //////////////////////////////////////
+// ======== Process Memory Usage ========
 // //////////////////////////////////////
 
 #ifdef _WIN32
@@ -450,3 +457,7 @@ std::string GetMemString()
 {
 	return SizeWithSuffix(GetCurrentRSS());
 }
+
+// //////////////////////////////////////
+// ======== Process Memory Usage ========
+// //////////////////////////////////////
