@@ -87,7 +87,7 @@ int main(int argc, char** argv)
 
 	fd_set readfds;
 	FD_ZERO(&readfds);
-	/* If detection is to fast we need  a break */
+	/* If detection is to fast we need a break */
 	struct timeval timeout;
 	timeout.tv_sec  = 0;
 	timeout.tv_usec = 0;
@@ -172,7 +172,7 @@ int main(int argc, char** argv)
 #pragma oss task in(pData0[0; imageSize])node(1) label("even_copy")
 			{
 				C2CvMat(pData0, 1);
-			} /* end task */
+			}
 
 #pragma oss task node(1) label("process_frame_0")
 			{
@@ -190,7 +190,7 @@ int main(int argc, char** argv)
 #pragma oss task in(pData1[0; imageSize])node(1) label("odd_copy")
 			{
 				C2CvMat(pData1, 0);
-			} /* end task */
+			}
 
 #pragma oss task node(1) label("process_frame_1")
 			{

@@ -253,7 +253,8 @@ void printDetections(const TrackingObjects& trackers)
 	g_lastTrackings = trackers;
 
 	str << string_format("], \"%s\": %llu }", g_settings.amountStr.c_str(), g_lastTrackings.size());
-	std::cout << str.str() << std::endl;
+	std::cout << str.str() << std::endl
+			  << std::flush;
 }
 
 #ifdef WRITE_IMAGE_2_DISK
@@ -262,7 +263,9 @@ uint32_t init = 0;
 
 extern "C"
 {
-	// ======= Config Functions =======
+	// //////////////////////////////////////
+	// ======= Config Functions =============
+	// //////////////////////////////////////
 
 	bool ParseConfig(const char* pConfigFile)
 	{
@@ -326,7 +329,9 @@ extern "C"
 		}
 	}
 
-	// ======= Init Functions =======
+	// //////////////////////////////////////
+	// ======= Init Functions ===============
+	// //////////////////////////////////////
 
 	bool InitVideoStream(const char* pStr)
 	{
@@ -364,13 +369,14 @@ extern "C"
 		for (std::size_t i = 0; i < g_pYolo->GetClassCount(); i++)
 			g_pSortTrackers[i] = SORT(5, 3);
 
-		// Set last tracking count to 0
 		g_lastTrackings.clear();
 
 		return true;
 	}
 
-	// ======= Processing Functions =======
+	// //////////////////////////////////////
+	// ======= Processing Functions =========
+	// //////////////////////////////////////
 
 	void GetNextFrame(uint8_t* pData)
 	{
@@ -453,7 +459,9 @@ extern "C"
 #endif // WRITE_IMAGE_2_DISK
 	}
 
-	// ======= Utility Functions =======
+	// //////////////////////////////////////
+	// ======= Utility Functions ============
+	// //////////////////////////////////////
 
 	void C2CvMat(uint8_t* pData, const uint8_t buffer)
 	{
@@ -491,20 +499,24 @@ extern "C"
 	void PrintFPS(const float fps, const uint64_t iteration, const float maxFPS, const float itrTime)
 	{
 		if (fps == 0.0f)
-			std::cout << string_format("{\"%s\": 0.0}", g_settings.fpsStr.c_str()) << std::endl;
+			std::cout << string_format("{\"%s\": 0.0}", g_settings.fpsStr.c_str()) << std::endl
+					  << std::flush;
 		else
 		{
 			std::cout << string_format("{\"%s\": %.2f, \"Iteration\": %d, \"maxFPS\": %.2f, \"lastCurrMSec\": %.2f}",
 									   g_settings.fpsStr.c_str(), fps, iteration, maxFPS, itrTime)
-					  << std::endl;
+					  << std::endl
+					  << std::flush;
 		}
 	}
 
 	void PrintStartString()
 	{
-		std::cout << "{\"STATUS\": \"looping starts now\"}" << std::endl;
+		std::cout << "{\"STATUS\": \"looping starts now\"}" << std::endl
+				  << std::flush;
 		if (g_settings.valid)
-			std::cout << string_format("{\"%s\": []}", g_settings.detectStr.c_str()) << std::endl;
+			std::cout << string_format("{\"%s\": []}", g_settings.detectStr.c_str()) << std::endl
+					  << std::flush;
 	}
 
 	void Cleanup()
