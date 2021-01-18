@@ -64,7 +64,7 @@ module.exports = NodeHelper.create({
 			if(cAppStarted) {
 				try{
 					self.gestureDet.stdin.write(payload.toString() + "\n");
-					console.log("[" + self.name + "] changing to: " + payload.toString() + " FPS");
+					//console.log("[" + self.name + "] changing to: " + payload.toString() + " FPS");
 				}
 				catch(err){
 					console.log(err)

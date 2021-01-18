@@ -24,6 +24,8 @@
  *  
  */
 
+// #define SERIAL
+
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -129,8 +131,9 @@ int main(int argc, char** argv)
 		fprintf(stderr, "Failed to open video sink, exiting ...\n");
 		return -1;
 	}
-
+#ifndef SERIAL
 #pragma oss task in(pConfigFile[0; cfgNameLen])node(1) label("init_node_1")
+#endif
 	{
 		printf("{\"STATUS\": \"initilize everything on node 1\"}\n");
 		if (!InitYoloTensorRT(pConfigFile))
@@ -140,8 +143,9 @@ int main(int argc, char** argv)
 		}
 	}
 
+#ifndef SERIAL
 #pragma oss taskwait
-
+#endif
 	PrintStartString();
 
 	sleep(1);
@@ -153,8 +157,14 @@ int main(int argc, char** argv)
 
 		if (select(1, &readfds, NULL, NULL, &timeout))
 		{
+			float oldFPS = maxFPS;
 			scanf("%s", message);
 			maxFPS = atof(message);
+			if (oldFPS != maxFPS)
+			{
+				printf("{\"STATUS\": \"change FPS to %.1f\"}\n", maxFPS);
+				fflush(stdout);
+			}
 		}
 
 		/* if no FPS are needed and maxFPS equals 0, wait and start from the beginning */
@@ -169,16 +179,22 @@ int main(int argc, char** argv)
 		{
 			GetNextFrame(pData0);
 
+#ifndef SERIAL
 #pragma oss task in(pData0[0; imageSize])node(1) label("even_copy")
+#endif
 			{
 				C2CvMat(pData0, 1);
 			}
 
+#ifndef SERIAL
 #pragma oss task node(1) label("process_frame_0")
+#endif
 			{
 				ProcessNextFrame(0);
 			}
+#ifndef SERIAL
 #pragma oss task node(1) label("process_detections_1")
+#endif
 			{
 				ProcessDetections(1);
 			}
@@ -187,22 +203,30 @@ int main(int argc, char** argv)
 		{
 			GetNextFrame(pData1);
 
+#ifndef SERIAL
 #pragma oss task in(pData1[0; imageSize])node(1) label("odd_copy")
+#endif
 			{
 				C2CvMat(pData1, 0);
 			}
 
+#ifndef SERIAL
 #pragma oss task node(1) label("process_frame_1")
+#endif
 			{
 				ProcessNextFrame(1);
 			}
+#ifndef SERIAL
 #pragma oss task node(1) label("process_detections_0")
+#endif
 			{
 				ProcessDetections(0);
 			}
 		}
 
+#ifndef SERIAL
 #pragma oss taskwait
+#endif
 
 		iteration++;
 		frameCnt++;

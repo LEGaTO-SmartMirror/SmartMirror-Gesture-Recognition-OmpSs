@@ -40,7 +40,7 @@
 #include <iostream>
 #include <thread>
 
-const float DEFAULT_YOLO_THRESHOLD = 0.35f;  // Threshold used in case non is specified in the config
+const float DEFAULT_YOLO_THRESHOLD = 0.3f;   // Threshold used in case non is specified in the config
 const double ONE_SECOND            = 1000.0; // One second in milliseconds
 const uint32_t MAX_BUFFERS         = 2;      // Number of buffers
 
@@ -477,15 +477,20 @@ extern "C"
 		double minFrameTime = 1000.0 / maxFPS;
 		double itrTime      = g_timer.GetElapsedTimeInMilliSec();
 		double fps;
-		g_elapsedTime += itrTime;
-		fps = 1000 / (g_elapsedTime / (*pFrameCnt));
 
 		if (g_timer.GetElapsedTimeInMilliSec() < minFrameTime)
+		{
 			std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int32_t>(std::round(minFrameTime - itrTime))));
+			g_elapsedTime += minFrameTime;
+		}
+		else
+			g_elapsedTime += itrTime;
+
+		fps = 1000 / (g_elapsedTime / (*pFrameCnt));
 
 		if (g_elapsedTime >= ONE_SECOND)
 		{
-			if (fps > maxFPS) fps = maxFPS;
+			// if (fps > maxFPS) fps = maxFPS;
 
 			PrintFPS(fps, iteration, maxFPS, itrTime);
 
